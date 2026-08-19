@@ -8,7 +8,7 @@ import { matchWinner } from '../src/game-core/rules'
 import { fanStateAt, vehicleStateAt } from '../src/game-core/timeline'
 
 type InputState={dx:number;dz:number;seq:number}
-type PlayerState=NetworkPlayer&{input:InputState;dashReady:number;nextAction:number;jumpStarted:number;jumpUntil:number;buildReady:number}
+type PlayerState=NetworkPlayer&{input:InputState;dashReady:number;nextAction:number;jumpStarted:number;jumpUntil:number;jumpBaseY:number;buildReady:number}
 type CoreState=NetworkCore&{fuse:number;chain:number}
 
 export class Room{
@@ -41,7 +41,7 @@ export class Room{
     if(slot===undefined){const replaceable=[...this.players.values()].filter(player=>player.bot).sort((a,b)=>a.slot-b.slot)[0];if(replaceable){slot=replaceable.slot;this.leave(replaceable.id)}}
     if(slot===undefined)throw new Error('ROOM_FULL')
     const spawn=GIANT_PLAYROOM.spawnPoints[slot],team:Team=slot<2?'cyan':'coral',yaw=team==='cyan'?Math.PI/2:-Math.PI/2
-    const player:PlayerState={id,name:name.slice(0,16)||`RIPPLE-${slot+1}`,slot,bot:false,team,x:spawn.x,z:spawn.z,yaw,hits:0,bombCapacity:GAME_BALANCE.CORE_CAPACITY,canKick:false,canThrow:false,pierceCharges:0,jumpY:0,downedUntil:0,eliminated:false,lastInput:0,input:{dx:0,dz:0,seq:0},dashReady:0,nextAction:0,jumpStarted:0,jumpUntil:0,buildReady:0}
+    const player:PlayerState={id,name:name.slice(0,16)||`RIPPLE-${slot+1}`,slot,bot:false,team,x:spawn.x,z:spawn.z,yaw,hits:0,bombCapacity:GAME_BALANCE.CORE_CAPACITY,canKick:false,canThrow:false,pierceCharges:0,jumpY:0,downedUntil:0,eliminated:false,lastInput:0,input:{dx:0,dz:0,seq:0},dashReady:0,nextAction:0,jumpStarted:0,jumpUntil:0,jumpBaseY:0,buildReady:0}
     this.lastHumanJoin=now
     this.players.set(id,player);this.events.push({event:'PLAYER_JOINED',actorId:id});return player
   }
@@ -62,7 +62,7 @@ export class Room{
     if(action==='PLACE')return this.placeCore(player)
     if(action==='JUMP'){
       if(now<player.jumpUntil)return false
-      player.jumpStarted=now;player.jumpUntil=now+GAME_BALANCE.JUMP_DURATION_MS;this.events.push({event:'PLAYER_JUMPED',actorId:id});return true
+      player.jumpBaseY=player.jumpY;player.jumpStarted=now;player.jumpUntil=now+GAME_BALANCE.JUMP_DURATION_MS;this.events.push({event:'PLAYER_JUMPED',actorId:id});return true
     }
     if(action==='BUILD'){
       if(now<player.buildReady)return false
@@ -108,7 +108,7 @@ export class Room{
     this.cores.clear();this.items.clear();this.winner=null;this.startedAt=now;this.tick=0;this.lastFanPush=0;this.lastVehicleCell=-99;this.lastHumanJoin=now;this.startedEventSent=false;this.resetArena()
     for(const player of this.players.values()){
       const spawn=GIANT_PLAYROOM.spawnPoints[player.slot]
-      player.x=spawn.x;player.z=spawn.z;player.yaw=player.team==='cyan'?Math.PI/2:-Math.PI/2;player.hits=0;player.bombCapacity=GAME_BALANCE.CORE_CAPACITY;player.canKick=false;player.canThrow=false;player.pierceCharges=0;player.jumpY=0;player.jumpStarted=0;player.jumpUntil=0;player.buildReady=0;player.downedUntil=0;player.eliminated=false;player.dashReady=0;player.nextAction=now+800+player.slot*350
+      player.x=spawn.x;player.z=spawn.z;player.yaw=player.team==='cyan'?Math.PI/2:-Math.PI/2;player.hits=0;player.bombCapacity=GAME_BALANCE.CORE_CAPACITY;player.canKick=false;player.canThrow=false;player.pierceCharges=0;player.jumpY=0;player.jumpStarted=0;player.jumpUntil=0;player.jumpBaseY=0;player.buildReady=0;player.downedUntil=0;player.eliminated=false;player.dashReady=0;player.nextAction=now+800+player.slot*350
       player.input={dx:0,dz:0,seq:player.input.seq};player.lastInput=player.input.seq
     }
     this.events.length=0;this.events.push({event:'MATCH_RESTARTED',actorId:id});return true
@@ -143,7 +143,7 @@ export class Room{
     }
     for(const player of this.players.values()){
       if(player.eliminated)continue
-      player.jumpY=now<player.jumpUntil?Math.sin(Math.max(0,Math.min(1,(now-player.jumpStarted)/GAME_BALANCE.JUMP_DURATION_MS))*Math.PI)*GAME_BALANCE.JUMP_HEIGHT:0
+      player.jumpY=now<player.jumpUntil?player.jumpBaseY+Math.sin(Math.max(0,Math.min(1,(now-player.jumpStarted)/GAME_BALANCE.JUMP_DURATION_MS))*Math.PI)*GAME_BALANCE.JUMP_HEIGHT:this.supportHeightAt(player.x,player.z)
       if(player.downedUntil&&now>=player.downedUntil){player.eliminated=true;player.downedUntil=0;this.events.push({event:'PLAYER_ELIMINATED',actorId:player.id});continue}
       if(player.downedUntil)continue
       if(Math.hypot(player.input.dx,player.input.dz)>.02)player.yaw=Math.atan2(player.input.dx,player.input.dz)
@@ -181,16 +181,17 @@ export class Room{
 
   snapshot(now=Date.now()):RoomSnapshot{
     const countdown=Math.max(0,Math.ceil((this.playAt()-now)/1000)),elapsed=Math.max(0,(now-this.playAt())/1000)
-    return {roomId:this.id,tick:this.tick,serverTime:now,phase:this.winner?'ENDED':countdown?'COUNTDOWN':'PLAYING',countdown,remaining:Math.max(0,GAME_BALANCE.MATCH_SECONDS-elapsed),fan:fanStateAt(elapsed),vehicle:vehicleStateAt(elapsed),ended:!!this.winner,winner:this.winner,players:[...this.players.values()].map(({input,dashReady,nextAction,jumpStarted,jumpUntil,buildReady,...player})=>player),cores:[...this.cores.values()].map(core=>({...core})),items:[...this.items.values()],holes:[...this.holes],walls:[...this.arena.walls],destroyedWalls:[...this.destroyedWalls]}
+    return {roomId:this.id,tick:this.tick,serverTime:now,phase:this.winner?'ENDED':countdown?'COUNTDOWN':'PLAYING',countdown,remaining:Math.max(0,GAME_BALANCE.MATCH_SECONDS-elapsed),fan:fanStateAt(elapsed),vehicle:vehicleStateAt(elapsed),ended:!!this.winner,winner:this.winner,players:[...this.players.values()].map(({input,dashReady,nextAction,jumpStarted,jumpUntil,jumpBaseY,buildReady,...player})=>player),cores:[...this.cores.values()].map(core=>({...core})),items:[...this.items.values()],holes:[...this.holes],walls:[...this.arena.walls],destroyedWalls:[...this.destroyedWalls]}
   }
 
   private playAt(){return this.startedAt+GAME_BALANCE.COUNTDOWN_SECONDS*1000}
   private canOccupy(player:PlayerState,x:number,z:number){
     const cell=worldToGrid({x,z})
     if(Math.abs(cell.x)>this.arena.halfX||Math.abs(cell.z)>this.arena.halfZ)return false
-    if(this.arena.walls.has(cellKey(cell))&&player.jumpY<.58)return false
+    if(this.arena.walls.has(cellKey(cell))&&player.jumpY<GAME_BALANCE.OBSTACLE_TOP_Y-.12)return false
     return ![...this.players.values()].some(other=>other.id!==player.id&&!other.eliminated&&Math.hypot(other.x-x,other.z-z)<GAME_BALANCE.PLAYER_RADIUS*2)
   }
+  private supportHeightAt(x:number,z:number){return this.arena.walls.has(cellKey(worldToGrid({x,z})))?GAME_BALANCE.OBSTACLE_TOP_Y:0}
   private knockback(player:PlayerState,originX:number,originZ:number){
     let dx=player.x-originX,dz=player.z-originZ,length=Math.hypot(dx,dz)
     if(length<.05){dx=player.slot%2?-1:1;dz=player.slot<2?-1:1;length=Math.hypot(dx,dz)}
@@ -212,7 +213,7 @@ export class Room{
     for(let slot=0;slot<4;slot++){
       if([...this.players.values()].some(player=>player.slot===slot))continue
       const spawn=GIANT_PLAYROOM.spawnPoints[slot],team:Team=slot<2?'cyan':'coral',id=`bot-${++this.botId}`,yaw=team==='cyan'?Math.PI/2:-Math.PI/2
-      this.players.set(id,{id,name:names[slot],slot,bot:true,team,x:spawn.x,z:spawn.z,yaw,hits:0,bombCapacity:GAME_BALANCE.CORE_CAPACITY,canKick:false,canThrow:false,pierceCharges:0,jumpY:0,downedUntil:0,eliminated:false,lastInput:0,input:{dx:0,dz:0,seq:0},dashReady:0,nextAction:now+800+slot*350,jumpStarted:0,jumpUntil:0,buildReady:0})
+      this.players.set(id,{id,name:names[slot],slot,bot:true,team,x:spawn.x,z:spawn.z,yaw,hits:0,bombCapacity:GAME_BALANCE.CORE_CAPACITY,canKick:false,canThrow:false,pierceCharges:0,jumpY:0,downedUntil:0,eliminated:false,lastInput:0,input:{dx:0,dz:0,seq:0},dashReady:0,nextAction:now+800+slot*350,jumpStarted:0,jumpUntil:0,jumpBaseY:0,buildReady:0})
       this.events.push({event:'BOT_FILLED',actorId:id})
     }
   }

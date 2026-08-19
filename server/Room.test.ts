@@ -1,4 +1,5 @@
 import { describe,expect,it } from 'vitest'
+import { GAME_BALANCE } from '../src/game-core/config'
 import { Room } from './Room'
 
 describe('authoritative room',()=>{
@@ -139,6 +140,8 @@ describe('authoritative room',()=>{
     room.input(player.id,1,1,0);room.step(.3,3380)
     expect(player.jumpY).toBeGreaterThan(1)
     expect(player.x).toBeGreaterThan(-10.5)
+    room.input(player.id,2,0,0);room.step(.1,3900)
+    expect(player.jumpY).toBe(GAME_BALANCE.OBSTACLE_TOP_Y)
   })
 
   it('consumes a piercing charge, crosses walls and creates lethal floor holes',()=>{

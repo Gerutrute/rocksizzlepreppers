@@ -23,7 +23,7 @@ const ARENA_X = HALF_X*2+1, ARENA_Z = HALF_Z*2+1
 const WALLS = GIANT_PLAYROOM.walls
 
 type Team = 'cyan'|'coral'
-type Actor = { id:string; name:string; team:Team; isPlayer:boolean; networkId?:string; model:THREE.Group; rig:RippleRig; materials:THREE.MeshStandardMaterial[]; shadow:THREE.Mesh; rescueRing:THREE.Mesh; baseScale:number; x:number; z:number; serverX:number; serverZ:number; renderX:number; renderZ:number; targetX:number; targetZ:number; lastRenderX:number; lastRenderZ:number; walkPhase:number; walkBlend:number; yaw:number; targetYaw:number; hits:number; bombCapacity:number; canKick:boolean; canThrow:boolean; pierceCharges:number; jumpY:number; jumpStarted:number; jumpUntil:number; buildReady:number; lockedUntil:number; downedUntil:number; eliminated:boolean; dashReady:number }
+type Actor = { id:string; name:string; team:Team; isPlayer:boolean; networkId?:string; model:THREE.Group; rig:RippleRig; materials:THREE.MeshStandardMaterial[]; shadow:THREE.Mesh; rescueRing:THREE.Mesh; baseScale:number; x:number; z:number; serverX:number; serverZ:number; renderX:number; renderZ:number; targetX:number; targetZ:number; lastRenderX:number; lastRenderZ:number; walkPhase:number; walkBlend:number; yaw:number; targetYaw:number; hits:number; bombCapacity:number; canKick:boolean; canThrow:boolean; pierceCharges:number; jumpY:number; jumpStarted:number; jumpUntil:number; jumpBaseY:number; buildReady:number; lockedUntil:number; downedUntil:number; eliminated:boolean; dashReady:number }
 type Flight = { fromX:number; fromZ:number; toX:number; toZ:number; start:number; duration:number }
 type Core = { id:number; networkId?:string; group:THREE.Group; x:number; z:number; fuse:number; owner:string; team:Team; piercing:boolean; ring:THREE.Mesh; flight?:Flight }
 type ItemView={id:string;kind:ItemKind;x:number;z:number;group:THREE.Group}
@@ -75,19 +75,30 @@ export default function SplashArena({onExit,networkSession}:{onExit:()=>void;net
     const coralLight=new THREE.PointLight('#ff5a63',20,11);coralLight.position.set(5,2,3);scene.add(coralLight)
 
     const floorMat=new THREE.MeshStandardMaterial({color:'#a76764',roughness:.82,metalness:.02})
-    const floor=new THREE.Mesh(new THREE.BoxGeometry(ARENA_X+1.5,.52,ARENA_Z+1.5),floorMat)
-    floor.position.y=-.25;floor.receiveShadow=true;scene.add(floor)
-    for(let x=-HALF_X;x<=HALF_X;x++){
-      const seam=new THREE.Mesh(new THREE.BoxGeometry(.018,.012,ARENA_Z+.8),new THREE.MeshBasicMaterial({color:'#673b55',transparent:true,opacity:.34}))
-      seam.position.set(x+.5,0,0);scene.add(seam)
+    const floorCellCount=ARENA_X*ARENA_Z
+    const floor=new THREE.InstancedMesh(new THREE.BoxGeometry(.98,.5,.98),floorMat,floorCellCount)
+    const floorCellIndices=new Map<string,number>(),floorMatrix=new THREE.Object3D()
+    let floorIndex=0
+    for(let z=-HALF_Z;z<=HALF_Z;z++)for(let x=-HALF_X;x<=HALF_X;x++){
+      floorMatrix.position.set(x,-.25,z);floorMatrix.scale.set(1,1,1);floorMatrix.updateMatrix();floor.setMatrixAt(floorIndex,floorMatrix.matrix);floorCellIndices.set(`${x},${z}`,floorIndex++)
     }
-    for(let z=-HALF_Z;z<=HALF_Z;z++){const seam=new THREE.Mesh(new THREE.BoxGeometry(ARENA_X+.8,.012,.018),new THREE.MeshBasicMaterial({color:'#673b55',transparent:true,opacity:.18}));seam.position.set(0,.004,z+.5);scene.add(seam)}
+    floor.instanceMatrix.setUsage(THREE.DynamicDrawUsage);floor.receiveShadow=true;scene.add(floor)
+    const setFloorCellVisible=(cell:string,visible:boolean)=>{
+      const index=floorCellIndices.get(cell);if(index===undefined)return
+      const [x,z]=cell.split(',').map(Number);floorMatrix.position.set(x,-.25,z);floorMatrix.scale.setScalar(visible?1:0);floorMatrix.updateMatrix();floor.setMatrixAt(index,floorMatrix.matrix);floor.instanceMatrix.needsUpdate=true
+    }
+    const underDeckMat=new THREE.MeshStandardMaterial({color:'#302747',emissive:'#211932',emissiveIntensity:.8,roughness:.92,metalness:.08,side:THREE.DoubleSide})
+    const underDeck=new THREE.Mesh(new THREE.BoxGeometry(ARENA_X+1.4,.18,ARENA_Z+1.4),underDeckMat);underDeck.position.y=-2.15;underDeck.receiveShadow=true;scene.add(underDeck)
+    const beamMat=new THREE.MeshStandardMaterial({color:'#765077',emissive:'#392543',emissiveIntensity:.62,roughness:.78,metalness:.12})
+    for(const z of [-7,-3,1,5]){const beam=new THREE.Mesh(new THREE.BoxGeometry(ARENA_X+1,.28,.32),beamMat);beam.position.set(0,-1.05,z);beam.castShadow=true;scene.add(beam)}
+    for(const x of [-12,-6,0,6,12]){const beam=new THREE.Mesh(new THREE.BoxGeometry(.32,.28,ARENA_Z+1),beamMat);beam.position.set(x,-1.28,0);beam.castShadow=true;scene.add(beam)}
     const grid=new THREE.GridHelper(ARENA_X,ARENA_X,'#7ff5ff','#664f7d')
     grid.position.y=.012;(grid.material as THREE.Material).transparent=true;(grid.material as THREE.Material).opacity=.32;grid.visible=debug;scene.add(grid)
 
     const pathCells=[[-13,6],[-12,6],[-11,6],[-10,6],[-9,6],[-8,6],[-8,5],[-8,4],[-8,3],[-7,3],[-6,3],[-5,3],[-4,3],[-4,2],[-4,1],[-3,1],[-2,1],[-1,1],[1,1],[2,1],[3,1],[4,1],[4,2],[4,3],[5,3],[6,3],[7,3],[8,3],[8,4],[8,5],[8,6],[9,6],[10,6],[11,6],[12,6],[13,6]]
     const pathMat=new THREE.MeshStandardMaterial({color:'#2389b7',emissive:'#19cde8',emissiveIntensity:.32,roughness:.58})
-    pathCells.forEach(([x,z])=>{if(WALLS.has(`${x},${z}`))return;const tile=new THREE.Mesh(new THREE.BoxGeometry(.94,.08,.94),pathMat);tile.position.set(x,.055,z);tile.receiveShadow=true;scene.add(tile)})
+    const pathTileViews=new Map<string,THREE.Mesh>()
+    pathCells.forEach(([x,z])=>{const cell=`${x},${z}`;if(WALLS.has(cell))return;const tile=new THREE.Mesh(new THREE.BoxGeometry(.94,.08,.94),pathMat);tile.position.set(x,.055,z);tile.receiveShadow=true;scene.add(tile);pathTileViews.set(cell,tile)})
 
     const edgeMat=new THREE.MeshStandardMaterial({color:'#3b345d',roughness:.68})
     ;[[0,.15,-HALF_Z-.72,ARENA_X+1,.48,.28],[0,.15,HALF_Z+.72,ARENA_X+1,.48,.28],[-HALF_X-.72,.15,0,.28,.48,ARENA_Z+1],[HALF_X+.72,.15,0,.28,.48,ARENA_Z+1]].forEach(v=>{const mesh=new THREE.Mesh(new THREE.BoxGeometry(v[3],v[4],v[5]),edgeMat);mesh.position.set(v[0],v[1],v[2]);mesh.castShadow=true;scene.add(mesh)})
@@ -97,7 +108,7 @@ export default function SplashArena({onExit,networkSession}:{onExit:()=>void;net
       if(wallViews.has(cell))return
       const [x,z]=cell.split(',').map(Number)
       const group=new THREE.Group()
-      const height=1.05+(index%3)*.18
+      const height=GAME_BALANCE.OBSTACLE_TOP_Y-.11
       const block=new THREE.Mesh(new THREE.BoxGeometry(.9,height,.9),new THREE.MeshStandardMaterial({color:colors[index%colors.length],roughness:.68}))
       block.position.y=height*.5;block.castShadow=true;block.receiveShadow=true;group.add(block)
       const stud=new THREE.Mesh(new THREE.CylinderGeometry(.18,.18,.11,20),new THREE.MeshStandardMaterial({color:'#ffe9bd',roughness:.5}))
@@ -126,13 +137,20 @@ export default function SplashArena({onExit,networkSession}:{onExit:()=>void;net
     const addHoleView=(cell:string)=>{
       if(holeViews.has(cell))return
       const [x,z]=cell.split(',').map(Number),group=new THREE.Group()
-      const voidDisc=new THREE.Mesh(new THREE.CircleGeometry(.47,32),new THREE.MeshBasicMaterial({color:'#070812',depthWrite:false}));voidDisc.rotation.x=-Math.PI/2;voidDisc.position.y=.025;group.add(voidDisc)
-      const rim=new THREE.Mesh(new THREE.TorusGeometry(.48,.045,8,28),new THREE.MeshStandardMaterial({color:'#4d2740',emissive:'#160812',roughness:.82}));rim.rotation.x=Math.PI/2;rim.position.y=.04;group.add(rim)
+      setFloorCellVisible(cell,false);const pathTile=pathTileViews.get(cell);if(pathTile)pathTile.visible=false
+      const rimMat=new THREE.MeshStandardMaterial({color:'#5e3049',emissive:'#180914',roughness:.84})
+      const shaftMat=new THREE.MeshStandardMaterial({color:'#35233f',emissive:'#170d21',emissiveIntensity:.55,roughness:.9,side:THREE.DoubleSide})
+      for(const side of [-1,1]){
+        const horizontalRim=new THREE.Mesh(new THREE.BoxGeometry(.98,.07,.07),rimMat);horizontalRim.position.set(0,.02,side*.455);group.add(horizontalRim)
+        const verticalRim=new THREE.Mesh(new THREE.BoxGeometry(.07,.07,.84),rimMat);verticalRim.position.set(side*.455,.02,0);group.add(verticalRim)
+        const horizontalShaft=new THREE.Mesh(new THREE.BoxGeometry(.9,1.55,.055),shaftMat);horizontalShaft.position.set(0,-.78,side*.46);group.add(horizontalShaft)
+        const verticalShaft=new THREE.Mesh(new THREE.BoxGeometry(.055,1.55,.9),shaftMat);verticalShaft.position.set(side*.46,-.78,0);group.add(verticalShaft)
+      }
       group.position.set(x,0,z);scene.add(group);holeViews.set(cell,group);holes.add(cell)
     }
     const syncHoleViews=(activeHoles:string[])=>{
       const active=new Set(activeHoles)
-      for(const [cell,group] of holeViews)if(!active.has(cell)){scene.remove(group);holeViews.delete(cell);holes.delete(cell)}
+      for(const [cell,group] of holeViews)if(!active.has(cell)){scene.remove(group);holeViews.delete(cell);holes.delete(cell);setFloorCellVisible(cell,true);const pathTile=pathTileViews.get(cell);if(pathTile)pathTile.visible=true}
       activeHoles.forEach(addHoleView)
     }
     const itemViews=new Map<string,ItemView>()
@@ -191,7 +209,7 @@ export default function SplashArena({onExit,networkSession}:{onExit:()=>void;net
       const shadow=new THREE.Mesh(shadowGeo,shadowMat);shadow.rotation.x=-Math.PI/2;shadow.position.set(x,.025,z);scene.add(shadow)
       const rescueRing=new THREE.Mesh(new THREE.TorusGeometry(.56,.055,10,32),new THREE.MeshBasicMaterial({color:team==='cyan'?'#68efff':'#ff7884',transparent:true,opacity:.85,depthWrite:false,toneMapped:false}))
       rescueRing.rotation.x=-Math.PI/2;rescueRing.position.set(x,.12,z);rescueRing.visible=false;scene.add(rescueRing)
-      return{id,name,team,isPlayer,model,rig,materials,shadow,rescueRing,baseScale:model.scale.x,x,z,serverX:x,serverZ:z,renderX:x,renderZ:z,targetX:x,targetZ:z,lastRenderX:x,lastRenderZ:z,walkPhase:0,walkBlend:0,yaw,targetYaw:yaw,hits:0,bombCapacity:GAME_BALANCE.CORE_CAPACITY,canKick:false,canThrow:false,pierceCharges:0,jumpY:0,jumpStarted:0,jumpUntil:0,buildReady:0,lockedUntil:0,downedUntil:0,eliminated:false,dashReady:0}
+      return{id,name,team,isPlayer,model,rig,materials,shadow,rescueRing,baseScale:model.scale.x,x,z,serverX:x,serverZ:z,renderX:x,renderZ:z,targetX:x,targetZ:z,lastRenderX:x,lastRenderZ:z,walkPhase:0,walkBlend:0,yaw,targetYaw:yaw,hits:0,bombCapacity:GAME_BALANCE.CORE_CAPACITY,canKick:false,canThrow:false,pierceCharges:0,jumpY:0,jumpStarted:0,jumpUntil:0,jumpBaseY:0,buildReady:0,lockedUntil:0,downedUntil:0,eliminated:false,dashReady:0}
     }
     const [spawnBloo,spawnLumi,spawnCoral,spawnVio]=GIANT_PLAYROOM.spawnPoints
     const player=createActor('bloo','BLOO','cyan',true,'bloo',spawnBloo.x,spawnBloo.z,1.04)
@@ -272,7 +290,7 @@ export default function SplashArena({onExit,networkSession}:{onExit:()=>void;net
     const rayCells=(core:Core)=>core.piercing?tracePiercingExplosion(arenaState,{x:core.x,z:core.z},GAME_BALANCE.CORE_RANGE):traceExplosion(arenaState,{x:core.x,z:core.z},GAME_BALANCE.CORE_RANGE)
     const actorCanOccupy=(actor:Actor,x:number,z:number)=>{
       const gx=Math.round(x),gz=Math.round(z)
-      if(Math.abs(gx)>HALF_X||Math.abs(gz)>HALF_Z||((arenaState.walls.has(`${gx},${gz}`))&&actor.jumpY<.58))return false
+      if(Math.abs(gx)>HALF_X||Math.abs(gz)>HALF_Z||((arenaState.walls.has(`${gx},${gz}`))&&actor.jumpY<GAME_BALANCE.OBSTACLE_TOP_Y-.12))return false
       return !actors.some(other=>other!==actor&&!other.eliminated&&Math.hypot(other.x-x,other.z-z)<GAME_BALANCE.PLAYER_RADIUS*2)
     }
     const knockActor=(actor:Actor,originX:number,originZ:number)=>{
@@ -398,7 +416,7 @@ export default function SplashArena({onExit,networkSession}:{onExit:()=>void;net
     const jump=()=>{
       if(networkClient){networkClient.send({type:'ACTION',seq:++inputSequence,action:'JUMP',direction:cardinalDirection()});return}
       const now=performance.now();if(now<controlled.jumpUntil)return
-      controlled.jumpStarted=now;controlled.jumpUntil=now+GAME_BALANCE.JUMP_DURATION_MS;say('JUMP! 장애물과 구멍을 뛰어넘으세요')
+      controlled.jumpBaseY=controlled.jumpY;controlled.jumpStarted=now;controlled.jumpUntil=now+GAME_BALANCE.JUMP_DURATION_MS;say('JUMP! 장애물과 구멍을 뛰어넘으세요')
     }
     const buildWall=()=>{
       if(networkClient){networkClient.send({type:'ACTION',seq:++inputSequence,action:'BUILD',direction:cardinalDirection()});say('BLOCK BUILD · SERVER VALIDATING');return}
@@ -491,7 +509,7 @@ export default function SplashArena({onExit,networkSession}:{onExit:()=>void;net
       if(ended)return
       if((networkClient?networkCountdown:Math.ceil((countdownEnds-now)/1000))>0)return
       elapsed+=dt
-      if(!networkClient)actors.forEach(actor=>{actor.jumpY=now<actor.jumpUntil?Math.sin(Math.max(0,Math.min(1,(now-actor.jumpStarted)/GAME_BALANCE.JUMP_DURATION_MS))*Math.PI)*GAME_BALANCE.JUMP_HEIGHT:0})
+      if(!networkClient)actors.forEach(actor=>{actor.jumpY=now<actor.jumpUntil?actor.jumpBaseY+Math.sin(Math.max(0,Math.min(1,(now-actor.jumpStarted)/GAME_BALANCE.JUMP_DURATION_MS))*Math.PI)*GAME_BALANCE.JUMP_HEIGHT:(arenaState.walls.has(`${Math.round(actor.x)},${Math.round(actor.z)}`)?GAME_BALANCE.OBSTACLE_TOP_Y:0)})
       let side=0,forwardInput=0
       if(keys.has('a')||keys.has('arrowleft'))side--
       if(keys.has('d')||keys.has('arrowright'))side++
