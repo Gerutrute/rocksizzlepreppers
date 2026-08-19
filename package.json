@@ -1,0 +1,36 @@
+{
+  "name": "project-splash",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently -k -n client,server \"vite\" \"tsx watch server/server.ts\"",
+    "dev:client": "vite",
+    "dev:server": "tsx watch server/server.ts",
+    "start:server": "tsx server/server.ts",
+    "build": "tsc -b && tsc -p tsconfig.server.json && vite build",
+    "preview": "vite preview",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@newkrok/three-particles": "^3.0.0",
+    "@vitejs/plugin-react": "latest",
+    "lucide-react": "latest",
+    "react": "latest",
+    "react-dom": "latest",
+    "three": "latest",
+    "tsx": "^4.23.12",
+    "vite": "latest",
+    "ws": "latest"
+  },
+  "devDependencies": {
+    "@types/node": "latest",
+    "@types/react": "latest",
+    "@types/react-dom": "latest",
+    "@types/three": "latest",
+    "@types/ws": "latest",
+    "concurrently": "latest",
+    "typescript": "latest",
+    "vitest": "latest"
+  }
+}

@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: project-splash-server
+    runtime: node
+    plan: free
+    region: singapore
+    buildCommand: npm ci
+    startCommand: npm run start:server
+    healthCheckPath: /health
+    autoDeployTrigger: commit
