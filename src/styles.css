@@ -831,6 +831,40 @@ footer small {
   width: 13px;
   color: #55e7ee;
 }
+.health-hud {
+  position: absolute;
+  z-index: 4;
+  left: 22px;
+  top: 94px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 11px;
+  border: 1px solid #ffffff1a;
+  border-radius: 9px;
+  background: #10142be8;
+  box-shadow: 0 8px 24px #0005;
+}
+.health-hud span {
+  margin-right: 3px;
+  color: #aeb6d2;
+  font-size: 7px;
+  font-weight: 900;
+}
+.health-hud svg {
+  width: 20px;
+  height: 20px;
+  stroke-width: 2.5;
+}
+.health-hud .filled {
+  color: #ff5f72;
+  fill: #ff5f72;
+  filter: drop-shadow(0 0 6px #ff405b88);
+}
+.health-hud .empty {
+  color: #6a6f89;
+  fill: transparent;
+}
 .status-panel {
   position: absolute;
   z-index: 3;
@@ -870,7 +904,7 @@ footer small {
 }
 .ability-bar > div {
   height: 62px;
-  min-width: 172px;
+  min-width: 132px;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -907,6 +941,10 @@ footer small {
 }
 .ability-bar .cooling {
   opacity: 0.62;
+}
+.ability-bar .locked {
+  opacity: 0.42;
+  filter: grayscale(0.8);
 }
 .core-orb {
   width: 29px;

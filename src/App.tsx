@@ -53,7 +53,7 @@ function Lobby({ onPlay,onRoom }:{ onPlay:()=>void;onRoom:()=>void }) {
     <section className="how" id="how">
       <div className="section-copy centered"><span>THE SPLASH LOOP</span><h2>예측하고. 연결하고. <em>탈출하라.</em></h2></div>
       <div className="steps">
-        <article><b>01</b><div className="step-icon cyan"><Zap/></div><h3>PLACE</h3><p>상대의 다음 칸을 읽고<br/>Splash Core를 설치하세요.</p><kbd>SPACE</kbd></article>
+        <article><b>01</b><div className="step-icon cyan"><Zap/></div><h3>PLACE</h3><p>상대의 다음 칸을 읽고<br/>Splash Core를 설치하세요.</p><kbd>F</kbd></article>
         <article><b>02</b><div className="step-icon violet"><Sparkles/></div><h3>CHAIN</h3><p>에너지 경로를 겹쳐 더 멀리,<br/>더 강한 연쇄를 설계하세요.</p><kbd>CORE ×4</kbd></article>
         <article><b>03</b><div className="step-icon coral"><Gamepad2/></div><h3>ESCAPE</h3><p>마지막 순간 대시로 빠져나가<br/>내가 만든 혼돈에서 생존하세요.</p><kbd>SHIFT</kbd></article>
       </div>

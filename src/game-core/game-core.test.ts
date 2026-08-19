@@ -3,6 +3,7 @@ import { GIANT_PLAYROOM } from './arena'
 import { blastHitWalls } from './destruction'
 import { getDangerCells, gridToWorld, isCellBlocked, traceExplosion, worldToGrid } from './grid'
 import { canPlaceCore, fluxPhase, matchWinner, resolveChain } from './rules'
+import { itemForRoll, piercingFloorCells, tracePiercingExplosion } from './powerups'
 import { fanStateAt, vehicleStateAt } from './timeline'
 
 describe('logical grid',()=>{
@@ -51,6 +52,29 @@ describe('core and match rules',()=>{
 
   it('selects the team with more survivors and fewer hits',()=>{
     expect(matchWinner([{team:'cyan',hits:2,eliminated:false},{team:'cyan',hits:3,eliminated:true},{team:'coral',hits:3,eliminated:true},{team:'coral',hits:3,eliminated:true}])).toBe('cyan')
+  })
+})
+
+describe('items and piercing blasts',()=>{
+  it('maps obstacle drop rolls to four item types and an empty result',()=>{
+    expect(itemForRoll(.05)).toBe('KICK')
+    expect(itemForRoll(.2)).toBe('THROW')
+    expect(itemForRoll(.4)).toBe('CAPACITY')
+    expect(itemForRoll(.6)).toBe('PIERCE')
+    expect(itemForRoll(.9)).toBeNull()
+  })
+
+  it('lets a piercing blast continue through walls',()=>{
+    const cells=tracePiercingExplosion(GIANT_PLAYROOM,{x:6,z:2},3)
+    expect(cells).toContainEqual({x:7,z:2})
+    expect(cells).toContainEqual({x:9,z:2})
+  })
+
+  it('opens floor holes away from the Core while preserving spawn cells',()=>{
+    const origin={x:-11,z:6},cells=tracePiercingExplosion(GIANT_PLAYROOM,origin,3)
+    const holes=piercingFloorCells(origin,cells,GIANT_PLAYROOM.spawnPoints)
+    expect(holes).not.toContainEqual(origin)
+    expect(holes).toContainEqual({x:-9,z:6})
   })
 })
 

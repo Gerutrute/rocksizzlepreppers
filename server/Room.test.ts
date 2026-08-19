@@ -16,6 +16,7 @@ describe('authoritative room',()=>{
 
   it('validates Core placement, kick, throw and fuse on the server',()=>{
     const room=new Room('CORE',0),player=room.join('p1','Bloo',0)
+    player.canKick=true;player.canThrow=true
     expect(room.action(player.id,'PLACE',{x:1,z:0},3000)).toBe(true)
     expect(room.action(player.id,'KICK',{x:1,z:0},3000)).toBe(true)
     expect(room.action(player.id,'THROW',{x:0,z:-1},3000)).toBe(true)
@@ -25,6 +26,7 @@ describe('authoritative room',()=>{
 
   it('emits authoritative chain depth for connected Core explosions',()=>{
     const room=new Room('CHAIN',0),player=room.join('p1','Bloo',0)
+    player.bombCapacity=2
     expect(room.action(player.id,'PLACE',{x:1,z:0},3000)).toBe(true)
     player.x=-8;player.z=6
     expect(room.action(player.id,'PLACE',{x:1,z:0},3000)).toBe(true)
@@ -120,5 +122,45 @@ describe('authoritative room',()=>{
     const next=room.join('next','Next',100_000)
     expect(next.slot).toBe(0)
     expect(room.snapshot(100_000)).toMatchObject({phase:'COUNTDOWN',countdown:3,remaining:180,ended:false})
+  })
+
+  it('starts with one Core slot and unlocks additional simultaneous placements through capacity',()=>{
+    const room=new Room('CAPACITY',0),player=room.join('p1','Bloo',0)
+    expect(room.action(player.id,'PLACE',{x:1,z:0},3000)).toBe(true)
+    player.x=-9;expect(room.action(player.id,'PLACE',{x:1,z:0},3000)).toBe(false)
+    player.bombCapacity=2;expect(room.action(player.id,'PLACE',{x:1,z:0},3000)).toBe(true)
+  })
+
+  it('builds an obstacle and allows a jumping player to move over it',()=>{
+    const room=new Room('JUMP',0),player=room.join('p1','Bloo',0)
+    expect(room.action(player.id,'BUILD',{x:1,z:0},3000)).toBe(true)
+    expect(room.arena.walls.has('-10,6')).toBe(true)
+    expect(room.action(player.id,'JUMP',{x:1,z:0},3000)).toBe(true)
+    room.input(player.id,1,1,0);room.step(.3,3380)
+    expect(player.jumpY).toBeGreaterThan(1)
+    expect(player.x).toBeGreaterThan(-10.5)
+  })
+
+  it('consumes a piercing charge, crosses walls and creates lethal floor holes',()=>{
+    const room=new Room('PIERCE',0),player=room.join('p1','Bloo',0)
+    player.x=6;player.z=2;player.pierceCharges=1
+    expect(room.action(player.id,'PLACE',{x:1,z:0},3000)).toBe(true)
+    expect([...room.cores.values()][0].piercing).toBe(true)
+    expect(player.pierceCharges).toBe(0)
+    room.step(3,6000)
+    expect(room.arena.walls.has('7,2')).toBe(false)
+    expect(room.holes.has('8,2')).toBe(true)
+  })
+
+  it('spawns a deterministic item from a destroyed obstacle and applies it on pickup',()=>{
+    const room=new Room('ITEM',0,()=>.4),player=room.join('p1','Bloo',0)
+    player.x=-10;player.z=3
+    expect(room.action(player.id,'PLACE',{x:0,z:-1},3000)).toBe(true)
+    room.step(3,6000)
+    expect([...room.items.values()][0]).toMatchObject({kind:'CAPACITY',x:-10,z:2})
+    player.x=-10;player.z=2;room.step(1/30,6034)
+    expect(player.bombCapacity).toBe(2)
+    expect(room.items.size).toBe(0)
+    expect(room.events.some(event=>event.event==='ITEM_COLLECTED'&&event.kind==='CAPACITY')).toBe(true)
   })
 })

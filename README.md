@@ -49,11 +49,13 @@ Render 서버 상태는 `https://<render-host>/health`에서 확인할 수 있�
 ## 조작
 
 - `WASD` / 방향키: 이동
-- `Space`: Splash Core 설치
+- `Space`: 점프 (장애물과 바닥 구멍 통과)
+- `F`: Splash Core 설치
+- `C`: 바라보는 방향에 파괴 가능한 장애물 설치
 - `Shift`: Ripple Dash
-- `E`: 가까운 Core 밀기
+- `E`: 밀기 아이템 획득 후 가까운 Core 밀기
 - 마우스: 투척 방향 조준
-- `Q` 누르기/놓기: 포물선 착지 프리뷰 후 가까운 Core를 최대 3칸 투척
+- `Q` 누르기/놓기: 던지기 아이템 획득 후 포물선 착지 프리뷰로 가까운 Core를 최대 3칸 투척
 - `R`: Flux Lock 상태의 가까운 아군 구조
 
 ## 현재 구현
@@ -62,6 +64,11 @@ Render 서버 상태는 `https://<render-host>/health`에서 확인할 수 있�
 - 30 Hz 고정 게임 판정 / 독립 렌더 루프
 - World 좌표와 Logical Grid 분리
 - 벽 차단이 적용된 십자형 Splash 전파
+- 기본 1개인 동시 Core 슬롯과 용량 아이템을 통한 최대 6개 확장
+- 파괴된 장애물의 밀기·던지기·Core 용량·관통 아이템 드롭
+- 관통 Core의 벽 관통, 플랫폼 바닥 파괴와 구멍 낙사
+- 기본 점프와 플레이어 장애물 설치
+- 채운 하트와 빈 하트로 표시하는 3칸 체력 HUD
 - Core fuse, 최대 보유량, 연쇄 작동
 - Dash, Core Kick, 포물선 Core Throw, 플레이어 충돌, 폭발 Knockback, Flux Lock, 3-hit elimination
 - BLOO·LUMI 대 CORAL·VIO의 2v2 전투와 3 Bot Fill

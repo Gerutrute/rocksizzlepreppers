@@ -1,4 +1,5 @@
 export type Team = 'cyan'|'coral'
+export type ItemKind = 'KICK'|'THROW'|'CAPACITY'|'PIERCE'
 
 export type NetworkPlayer = {
   id:string
@@ -10,6 +11,11 @@ export type NetworkPlayer = {
   z:number
   yaw:number
   hits:number
+  bombCapacity:number
+  canKick:boolean
+  canThrow:boolean
+  pierceCharges:number
+  jumpY:number
   downedUntil:number
   eliminated:boolean
   lastInput:number
@@ -22,7 +28,10 @@ export type NetworkCore = {
   x:number
   z:number
   fuse:number
+  piercing:boolean
 }
+
+export type NetworkItem={id:string;kind:ItemKind;x:number;z:number}
 
 export type RoomSnapshot = {
   roomId:string
@@ -37,17 +46,20 @@ export type RoomSnapshot = {
   winner:Team|'draw'|null
   players:NetworkPlayer[]
   cores:NetworkCore[]
+  items:NetworkItem[]
+  holes:string[]
+  walls:string[]
   destroyedWalls:string[]
 }
 
 export type ClientMessage =
   | {type:'JOIN';roomId:string;name:string}
   | {type:'INPUT';seq:number;dx:number;dz:number}
-  | {type:'ACTION';seq:number;action:'PLACE'|'DASH'|'KICK'|'THROW'|'RESCUE';direction:{x:number;z:number}}
+  | {type:'ACTION';seq:number;action:'PLACE'|'DASH'|'KICK'|'THROW'|'RESCUE'|'JUMP'|'BUILD';direction:{x:number;z:number}}
   | {type:'REMATCH'}
 
 export type ServerMessage =
   | {type:'WELCOME';playerId:string;slot:number;roomId:string}
   | {type:'SNAPSHOT';snapshot:RoomSnapshot}
-  | {type:'GAME_EVENT';event:string;actorId?:string;targetId?:string;coreId?:string;x?:number;z?:number;team?:Team;chain?:number}
+  | {type:'GAME_EVENT';event:string;actorId?:string;targetId?:string;coreId?:string;itemId?:string;kind?:ItemKind;x?:number;z?:number;team?:Team;chain?:number;piercing?:boolean}
   | {type:'ERROR';message:string}
