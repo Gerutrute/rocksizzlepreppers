@@ -20,7 +20,7 @@ const httpServer=createServer((request,response)=>{
     return
   }
   response.writeHead(200,{'content-type':'text/plain; charset=utf-8'})
-  response.end('PROJECT SPLASH WebSocket server')
+  response.end('Rock Sizzle Preppers WebSocket server')
 })
 const wss=new WebSocketServer({server:httpServer})
 wss.on('connection',socket=>{
@@ -44,4 +44,4 @@ wss.on('connection',socket=>{
 setInterval(()=>{for(const room of rooms.values())room.step(1/30)},1000/30)
 setInterval(()=>{for(const room of rooms.values()){while(room.events.length)broadcast(room,{type:'GAME_EVENT',...room.events.shift()!});broadcast(room,{type:'SNAPSHOT',snapshot:room.snapshot()})}},1000/15)
 
-httpServer.listen(PORT,HOST,()=>console.log(`PROJECT SPLASH authoritative server listening on ws://${HOST}:${PORT}`))
+httpServer.listen(PORT,HOST,()=>console.log(`Rock Sizzle Preppers authoritative server listening on ws://${HOST}:${PORT}`))

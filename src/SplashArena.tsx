@@ -63,7 +63,7 @@ export default function SplashArena({onExit,networkSession}:{onExit:()=>void;net
     renderer.outputColorSpace=THREE.SRGBColorSpace
     renderer.toneMapping=THREE.ACESFilmicToneMapping
     renderer.toneMappingExposure=1.18
-    renderer.domElement.tabIndex=0;renderer.domElement.setAttribute('aria-label','PROJECT SPLASH 3D arena')
+    renderer.domElement.tabIndex=0;renderer.domElement.setAttribute('aria-label','Rock Sizzle Preppers 3D arena')
     host.appendChild(renderer.domElement)
 
     scene.add(new THREE.HemisphereLight('#fff2d3','#352252',2.9))
@@ -697,7 +697,7 @@ export default function SplashArena({onExit,networkSession}:{onExit:()=>void;net
   const winnerTeam=result==='win'?yourTeam:rivalTeam
   return <main className="game">
     <div ref={hostRef} className="three-host"/>
-    <header className="game-header"><button onClick={onExit}><ArrowLeft/> 나가기</button><div className="match-brand"><Mark/><span>GIANT PLAYROOM<small>CORE SKIRMISH · 30 HZ SIM</small></span></div><button className={`sound ${muted?'muted':''}`} onClick={()=>setMuted(value=>!value)} aria-label={muted?'사운드 켜기':'사운드 끄기'}>{muted?<VolumeX/>:<Volume2/>}</button></header>
+    <header className="game-header"><button onClick={onExit}><ArrowLeft/> 나가기</button><div className="match-brand"><Mark/><span>ROCK SIZZLE PREPPERS<small>CORE SKIRMISH · 30 HZ SIM</small></span></div><button className={`sound ${muted?'muted':''}`} onClick={()=>setMuted(value=>!value)} aria-label={muted?'사운드 켜기':'사운드 끄기'}>{muted?<VolumeX/>:<Volume2/>}</button></header>
     <section className="score"><div className={`team you ${ui.localTeam}`}><span className="avatar-stack"><img src={yourTeam.images[0]}/><img src={yourTeam.images[1]}/></span><span>TEAM YOU<small>{yourTeam.names}</small></span><b>{ui.alliesAlive}</b></div><time>{String(Math.floor(ui.time/60)).padStart(2,'0')}:{String(ui.time%60).padStart(2,'0')}</time><div className={`team rival ${localCyan?'coral':'cyan'}`}><b>{ui.rivalsAlive}</b><span>RIVALS<small>{rivalTeam.names}</small></span><span className="avatar-stack"><img src={rivalTeam.images[0]}/><img src={rivalTeam.images[1]}/></span></div></section>
     <div className="message"><Sparkles/>{ui.message}</div>
     <div className="health-hud"><span>HP</span>{[0,1,2].map(index=><Heart key={index} className={index<ui.health?'filled':'empty'}/>)}</div>

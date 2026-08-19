@@ -1,4 +1,4 @@
-# PROJECT SPLASH
+# Rock Sizzle Preppers
 
 Three.js로 직접 렌더링하는 브라우저 3D 아레나 게임의 첫 플레이어블입니다.
 
@@ -89,7 +89,7 @@ Render 서버 상태는 `https://<render-host>/health`에서 확인할 수 있�
 - Web Audio 기반 Core 설치·폭발·투척·대시·구조·선풍기 정보음과 음소거
 - `?debug=true` Grid / Collider / Bot 목표선 / 서버 위치 고스트와 FPS / Frame Time / Draw Calls / Triangles / Textures / Sim Bodies / RTT / Packet Rate / Pending Input 런타임 HUD
 - 20개 고정 풀과 InstancedMesh를 사용하는 누수 없는 연쇄 폭발 VFX
-- `imagegen`으로 제작한 PROJECT SPLASH 전용 캐릭터 및 키 아트
+- `imagegen`으로 제작한 Rock Sizzle Preppers 전용 캐릭터 및 키 아트
 
 ## 고정 아트 디렉션
 
