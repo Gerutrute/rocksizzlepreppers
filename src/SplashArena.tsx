@@ -12,12 +12,18 @@ import { fanStateAt, vehicleStateAt } from './game-core/timeline'
 import type { RoomSnapshot, ServerMessage } from './game-core/protocol'
 import { NetworkClient, type NetworkSession } from './network/NetworkClient'
 import { AudioManager } from './audio/AudioManager'
+import { GameMusicPlaylist } from './audio/GameMusicPlaylist'
 import { createRippleModel, type RippleRig, type RippleVariant } from './three/RippleModel'
 
 const BLUE = '/assets/splash/ripple-blue-keyart-v2-web.png'
 const RED = '/assets/splash/ripple-red-keyart-v2-web.png'
 const YELLOW = '/assets/splash/ripple-yellow-keyart-v2-web.png'
 const VIO = '/assets/splash/ripple-vio-keyart-v1-web.webp'
+const GAME_MUSIC = [
+  '/assets/audio/neon-bounce.mp3',
+  '/assets/audio/neon-platform-rush-1.mp3',
+  '/assets/audio/neon-platform-rush-2.mp3',
+]
 const HALF_X = GIANT_PLAYROOM.halfX, HALF_Z = GIANT_PLAYROOM.halfZ
 const ARENA_X = HALF_X*2+1, ARENA_Z = HALF_Z*2+1
 const WALLS = GIANT_PLAYROOM.walls
@@ -39,15 +45,18 @@ function Mark(){ return <span className="splash-mark"><i/><i/><b/></span> }
 export default function SplashArena({onExit,networkSession}:{onExit:()=>void;networkSession?:NetworkSession}){
   const hostRef=useRef<HTMLDivElement>(null)
   const networkClientRef=useRef<NetworkClient|null>(null)
+  const musicRef=useRef<GameMusicPlaylist|null>(null)
   const [round,setRound]=useState(0)
   const [result,setResult]=useState<'win'|'lose'|null>(null)
   const [muted,setMuted]=useState(false),mutedRef=useRef(false);mutedRef.current=muted
   const debug=new URLSearchParams(location.search).get('debug')==='true'
   const [ui,setUi]=useState<UiState>(initialUi)
+  useEffect(()=>musicRef.current?.setMuted(muted),[muted])
 
   useEffect(()=>{
     const host=hostRef.current!
     const audio=new AudioManager(()=>mutedRef.current)
+    const music=new GameMusicPlaylist(GAME_MUSIC,()=>mutedRef.current);musicRef.current=music;music.unlock()
     const arenaState={...GIANT_PLAYROOM,walls:new Set(WALLS)}
     const blocked=(x:number,z:number)=>isCellBlocked(arenaState,{x,z})
     const scene=new THREE.Scene()
@@ -478,7 +487,7 @@ export default function SplashArena({onExit,networkSession}:{onExit:()=>void;net
     const stopNetwork=networkClient?.onMessage(onNetworkMessage)??(()=>{})
     if(networkClient&&networkSession)networkClient.connect(networkSession).catch(()=>say('NETWORK UNAVAILABLE · 서버를 확인하세요'))
     const onDown=(event:KeyboardEvent)=>{
-      audio.unlock()
+      audio.unlock();music.unlock()
       if([' ','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(event.key))event.preventDefault()
       if((networkClient?networkCountdown:Math.ceil((countdownEnds-performance.now())/1000))>0||ended)return
       keys.add(event.key.toLowerCase())
@@ -500,7 +509,7 @@ export default function SplashArena({onExit,networkSession}:{onExit:()=>void;net
         if(length>.18){facing={x:dx/length,z:dz/length};if(aiming)controlled.targetYaw=Math.atan2(facing.x,facing.z)}
       }
     }
-    const focusArena=()=>{renderer.domElement.focus();audio.unlock()}
+    const focusArena=()=>{renderer.domElement.focus();audio.unlock();music.unlock()}
     window.addEventListener('keydown',onDown);window.addEventListener('keyup',onUp);renderer.domElement.addEventListener('pointermove',onPointerMove);renderer.domElement.addEventListener('pointerdown',focusArena)
     const resize=()=>{const width=host.clientWidth,height=host.clientHeight;camera.aspect=width/height;camera.updateProjectionMatrix();renderer.setSize(width,height,false)}
     const observer=new ResizeObserver(resize);observer.observe(host);resize()
@@ -684,7 +693,7 @@ export default function SplashArena({onExit,networkSession}:{onExit:()=>void;net
     }
     frame=requestAnimationFrame(loop)
     return()=>{
-      cancelAnimationFrame(frame);observer.disconnect();window.removeEventListener('keydown',onDown);window.removeEventListener('keyup',onUp);renderer.domElement.removeEventListener('pointermove',onPointerMove);renderer.domElement.removeEventListener('pointerdown',focusArena);stopNetwork();networkClient?.close();if(networkClientRef.current===networkClient)networkClientRef.current=null;audio.close();particleExplosions.forEach(effect=>effect.system.dispose());particleExplosions.length=0
+      cancelAnimationFrame(frame);observer.disconnect();window.removeEventListener('keydown',onDown);window.removeEventListener('keyup',onUp);renderer.domElement.removeEventListener('pointermove',onPointerMove);renderer.domElement.removeEventListener('pointerdown',focusArena);stopNetwork();networkClient?.close();if(networkClientRef.current===networkClient)networkClientRef.current=null;audio.close();music.close();if(musicRef.current===music)musicRef.current=null;particleExplosions.forEach(effect=>effect.system.dispose());particleExplosions.length=0
       renderer.dispose();scene.traverse(object=>{if(object instanceof THREE.Mesh||object instanceof THREE.Sprite){object.geometry?.dispose?.();const material=(object as THREE.Mesh).material;if(Array.isArray(material))material.forEach(item=>item.dispose());else material?.dispose()}})
       if(host.contains(renderer.domElement))host.removeChild(renderer.domElement)
     }
