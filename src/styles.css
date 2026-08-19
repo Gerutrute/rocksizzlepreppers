@@ -144,6 +144,28 @@ a {
   background: #5be6b2;
   box-shadow: 0 0 9px #5be6b2;
 }
+.lobby-sound {
+  width: 42px;
+  height: 42px;
+  margin-right: 10px;
+  border: 1px solid #ffffff24;
+  border-radius: 9px;
+  background: #111832b8;
+  color: #73edf3;
+  display: grid;
+  place-items: center;
+  transition: border-color 160ms ease, color 160ms ease, background 160ms ease;
+}
+.lobby-sound:hover {
+  border-color: #51e3ec80;
+  background: #173048d9;
+}
+.lobby-sound.muted {
+  color: #7c849d;
+}
+.lobby-sound svg {
+  width: 16px;
+}
 .nav-play,
 .arena-copy button {
   height: 42px;

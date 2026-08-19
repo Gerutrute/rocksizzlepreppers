@@ -1,5 +1,5 @@
-import { lazy, Suspense, useEffect, useState } from 'react'
-import { ChevronRight, Copy, Gamepad2, Play, Radio, Sparkles, Users, Zap } from 'lucide-react'
+import { lazy, Suspense, useEffect, useRef, useState } from 'react'
+import { ChevronRight, Copy, Gamepad2, Play, Radio, Sparkles, Users, Volume2, VolumeX, Zap } from 'lucide-react'
 import type { NetworkSession } from './network/NetworkClient'
 
 const SplashArena = lazy(() => import('./SplashArena'))
@@ -8,6 +8,7 @@ const BLUE = '/assets/splash/ripple-blue-keyart-v2-web.png'
 const RED = '/assets/splash/ripple-red-keyart-v2-web.png'
 const YELLOW = '/assets/splash/ripple-yellow-keyart-v2-web.png'
 const VIO = '/assets/splash/ripple-vio-keyart-v1-web.webp'
+const LOBBY_MUSIC = '/assets/audio/purrfectly-chaotic.mp3'
 
 function Mark() { return <span className="splash-mark" aria-hidden="true"><i/><i/><b/></span> }
 
@@ -19,11 +20,21 @@ const fighters = [
 ]
 
 function Lobby({ onPlay,onRoom }:{ onPlay:()=>void;onRoom:()=>void }) {
+  const [musicMuted,setMusicMuted]=useState(false)
+  const musicRef=useRef<HTMLAudioElement|null>(null)
+  useEffect(()=>{
+    const music=new Audio(LOBBY_MUSIC);music.loop=true;music.volume=.32;music.preload='auto';musicRef.current=music
+    const startMusic=()=>{if(!music.muted)void music.play().catch(()=>{})}
+    startMusic();window.addEventListener('pointerdown',startMusic);window.addEventListener('keydown',startMusic)
+    return()=>{window.removeEventListener('pointerdown',startMusic);window.removeEventListener('keydown',startMusic);music.pause();music.currentTime=0;musicRef.current=null}
+  },[])
+  useEffect(()=>{const music=musicRef.current;if(!music)return;music.muted=musicMuted;if(!musicMuted)void music.play().catch(()=>{})},[musicMuted])
   return <main className="lobby">
     <nav className="nav">
       <a className="brand" href="#top"><Mark/><span>ROCK SIZZLE</span><strong>PREPPERS</strong></a>
       <div className="nav-links"><a href="#ripples">리플</a><a href="#how">게임 소개</a><a href="#arena">아레나</a></div>
       <span className="online"><i/> ARENA ONLINE</span>
+      <button className={`lobby-sound ${musicMuted?'muted':''}`} onClick={()=>setMusicMuted(value=>!value)} aria-label={musicMuted?'홈 음악 켜기':'홈 음악 끄기'} title="Purrfectly Chaotic">{musicMuted?<VolumeX/>:<Volume2/>}</button>
       <button className="nav-play" onClick={onPlay}><Play fill="currentColor"/> QUICK MATCH</button>
     </nav>
 
