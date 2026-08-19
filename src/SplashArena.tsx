@@ -29,17 +29,17 @@ const ARENA_X = HALF_X*2+1, ARENA_Z = HALF_Z*2+1
 const WALLS = GIANT_PLAYROOM.walls
 
 type Team = 'cyan'|'coral'
-type Actor = { id:string; name:string; team:Team; isPlayer:boolean; networkId?:string; model:THREE.Group; rig:RippleRig; materials:THREE.MeshStandardMaterial[]; shadow:THREE.Mesh; rescueRing:THREE.Mesh; baseScale:number; x:number; z:number; serverX:number; serverZ:number; renderX:number; renderZ:number; targetX:number; targetZ:number; lastRenderX:number; lastRenderZ:number; walkPhase:number; walkBlend:number; yaw:number; targetYaw:number; hits:number; bombCapacity:number; canKick:boolean; canThrow:boolean; pierceCharges:number; jumpY:number; jumpStarted:number; jumpUntil:number; jumpBaseY:number; buildReady:number; lockedUntil:number; downedUntil:number; eliminated:boolean; dashReady:number }
-type Flight = { fromX:number; fromZ:number; toX:number; toZ:number; start:number; duration:number }
-type Core = { id:number; networkId?:string; group:THREE.Group; x:number; z:number; fuse:number; owner:string; team:Team; piercing:boolean; ring:THREE.Mesh; flight?:Flight }
+type Actor = { id:string; name:string; team:Team; isPlayer:boolean; networkId?:string; model:THREE.Group; rig:RippleRig; materials:THREE.MeshStandardMaterial[]; shadow:THREE.Mesh; rescueRing:THREE.Mesh; baseScale:number; x:number; z:number; serverX:number; serverZ:number; renderX:number; renderZ:number; targetX:number; targetZ:number; lastRenderX:number; lastRenderZ:number; walkPhase:number; walkBlend:number; yaw:number; targetYaw:number; hits:number; bombCapacity:number; canKick:boolean; canThrow:boolean; pierceCharges:number; jumpY:number; jumpStarted:number; jumpUntil:number; jumpBaseY:number; buildReady:number; falling:boolean; fallVelocity:number; lockedUntil:number; downedUntil:number; eliminated:boolean; dashReady:number }
+type Flight = { fromX:number; fromY:number; fromZ:number; toX:number; toY:number; toZ:number; start:number; duration:number }
+type Core = { id:number; networkId?:string; group:THREE.Group; x:number; y:number; z:number; fuse:number; owner:string; team:Team; piercing:boolean; ring:THREE.Mesh; flight?:Flight }
 type ItemView={id:string;kind:ItemKind;x:number;z:number;group:THREE.Group}
 type Burst = { group:THREE.Group; born:number; material:THREE.MeshStandardMaterial; pulses:THREE.InstancedMesh; ribbons:THREE.InstancedMesh; rings:THREE.InstancedMesh; shards:THREE.InstancedMesh; shock:THREE.Mesh; light:THREE.PointLight; cells:Array<{x:number;z:number}>; active:boolean }
 type Debris = {mesh:THREE.Mesh;velocity:THREE.Vector3;spin:THREE.Vector3;born:number}
 type ParticleExplosion = {system:ParticleSystem;born:number}
-type UiState = { time:number; countdown:number; localTeam:Team; playerHits:number; health:number; botHits:number; allyHits:number; rival2Hits:number; alliesAlive:number; rivalsAlive:number; onlineHumans:number; cores:number; capacity:number; canKick:boolean; canThrow:boolean; pierceCharges:number; chain:number; dash:number; fan:'CALM'|'WARNING'|'ACTIVE'; vehicle:boolean; fps:number;frameMs:number;drawCalls:number;triangles:number;textures:number;simBodies:number;rtt:number;packetRate:number;pendingInputs:number;serverPos:string;clientPos:string;message:string }
+type UiState = { time:number; countdown:number; localTeam:Team; playerHits:number; health:number; botHits:number; allyHits:number; rival2Hits:number; alliesAlive:number; rivalsAlive:number; onlineHumans:number; cores:number; capacity:number; canKick:boolean; canThrow:boolean; pierceCharges:number; chain:number; dash:number; build:number; fan:'CALM'|'WARNING'|'ACTIVE'; vehicle:boolean; fps:number;frameMs:number;drawCalls:number;triangles:number;textures:number;simBodies:number;rtt:number;packetRate:number;pendingInputs:number;serverPos:string;clientPos:string;message:string }
 
 const lerpAngle=(from:number,to:number,alpha:number)=>from+Math.atan2(Math.sin(to-from),Math.cos(to-from))*alpha
-const initialUi=():UiState=>({time:GAME_BALANCE.MATCH_SECONDS,countdown:3,localTeam:'cyan',playerHits:0,health:3,botHits:0,allyHits:0,rival2Hits:0,alliesAlive:2,rivalsAlive:2,onlineHumans:0,cores:1,capacity:1,canKick:false,canThrow:false,pierceCharges:0,chain:0,dash:1,fan:'CALM',vehicle:false,fps:0,frameMs:0,drawCalls:0,triangles:0,textures:0,simBodies:4,rtt:0,packetRate:0,pendingInputs:0,serverPos:'0.00,0.00',clientPos:'0.00,0.00',message:'READY · 시작 신호를 기다리세요'})
+const initialUi=():UiState=>({time:GAME_BALANCE.MATCH_SECONDS,countdown:3,localTeam:'cyan',playerHits:0,health:3,botHits:0,allyHits:0,rival2Hits:0,alliesAlive:2,rivalsAlive:2,onlineHumans:0,cores:1,capacity:1,canKick:false,canThrow:false,pierceCharges:0,chain:0,dash:1,build:1,fan:'CALM',vehicle:false,fps:0,frameMs:0,drawCalls:0,triangles:0,textures:0,simBodies:4,rtt:0,packetRate:0,pendingInputs:0,serverPos:'0.00,0.00',clientPos:'0.00,0.00',message:'READY · 시작 신호를 기다리세요'})
 
 function Mark(){ return <span className="splash-mark"><i/><i/><b/></span> }
 export default function SplashArena({onExit,networkSession}:{onExit:()=>void;networkSession?:NetworkSession}){
@@ -96,8 +96,9 @@ export default function SplashArena({onExit,networkSession}:{onExit:()=>void;net
       const index=floorCellIndices.get(cell);if(index===undefined)return
       const [x,z]=cell.split(',').map(Number);floorMatrix.position.set(x,-.25,z);floorMatrix.scale.setScalar(visible?1:0);floorMatrix.updateMatrix();floor.setMatrixAt(index,floorMatrix.matrix);floor.instanceMatrix.needsUpdate=true
     }
-    const underDeckMat=new THREE.MeshStandardMaterial({color:'#302747',emissive:'#211932',emissiveIntensity:.8,roughness:.92,metalness:.08,side:THREE.DoubleSide})
-    const underDeck=new THREE.Mesh(new THREE.BoxGeometry(ARENA_X+1.4,.18,ARENA_Z+1.4),underDeckMat);underDeck.position.y=-2.15;underDeck.receiveShadow=true;scene.add(underDeck)
+    const underDeckMat=new THREE.MeshBasicMaterial({color:'#3f315c',side:THREE.DoubleSide})
+    const underDeck=new THREE.Mesh(new THREE.BoxGeometry(ARENA_X+1.4,.24,ARENA_Z+1.4),underDeckMat);underDeck.position.y=-3.72;underDeck.receiveShadow=true;scene.add(underDeck)
+    const underDeckGrid=new THREE.GridHelper(ARENA_X+1,ARENA_X+1,'#a36fa8','#57416d');underDeckGrid.position.y=-3.58;(underDeckGrid.material as THREE.Material).transparent=true;(underDeckGrid.material as THREE.Material).opacity=.7;scene.add(underDeckGrid)
     const beamMat=new THREE.MeshStandardMaterial({color:'#765077',emissive:'#392543',emissiveIntensity:.62,roughness:.78,metalness:.12})
     for(const z of [-7,-3,1,5]){const beam=new THREE.Mesh(new THREE.BoxGeometry(ARENA_X+1,.28,.32),beamMat);beam.position.set(0,-1.05,z);beam.castShadow=true;scene.add(beam)}
     for(const x of [-12,-6,0,6,12]){const beam=new THREE.Mesh(new THREE.BoxGeometry(.32,.28,ARENA_Z+1),beamMat);beam.position.set(x,-1.28,0);beam.castShadow=true;scene.add(beam)}
@@ -142,25 +143,31 @@ export default function SplashArena({onExit,networkSession}:{onExit:()=>void;net
       for(const cell of [...wallViews.keys()])if(!active.has(cell))destroyWallView(cell,false)
       arenaState.walls.clear();activeWalls.forEach((cell,index)=>{arenaState.walls.add(cell);createWallView(cell,index)})
     }
-    const holeViews=new Map<string,THREE.Group>(),holes=new Set<string>()
+    type HoleEdges={north:THREE.Group;south:THREE.Group;west:THREE.Group;east:THREE.Group}
+    const holeViews=new Map<string,{group:THREE.Group;edges:HoleEdges}>(),holes=new Set<string>()
+    const holeRimMat=new THREE.MeshStandardMaterial({color:'#5e3049',emissive:'#180914',roughness:.84})
+    const holeShaftMat=new THREE.MeshStandardMaterial({color:'#35233f',emissive:'#170d21',emissiveIntensity:.55,roughness:.9,side:THREE.DoubleSide})
+    const createHoleEdge=(horizontal:boolean,offset:number)=>{
+      const edge=new THREE.Group()
+      const rim=new THREE.Mesh(new THREE.BoxGeometry(horizontal?.98:.07,.07,horizontal?.07:.98),holeRimMat);rim.position.set(horizontal?0:offset,.02,horizontal?offset:0);edge.add(rim)
+      const shaft=new THREE.Mesh(new THREE.BoxGeometry(horizontal?.9:.055,3.3,horizontal?.055:.9),holeShaftMat);shaft.position.set(horizontal?0:offset,-1.65,horizontal?offset:0);edge.add(shaft)
+      return edge
+    }
+    const updateHoleConnections=()=>{
+      for(const [cell,view] of holeViews){const [x,z]=cell.split(',').map(Number);view.edges.north.visible=!holes.has(`${x},${z-1}`);view.edges.south.visible=!holes.has(`${x},${z+1}`);view.edges.west.visible=!holes.has(`${x-1},${z}`);view.edges.east.visible=!holes.has(`${x+1},${z}`)}
+    }
     const addHoleView=(cell:string)=>{
       if(holeViews.has(cell))return
       const [x,z]=cell.split(',').map(Number),group=new THREE.Group()
       setFloorCellVisible(cell,false);const pathTile=pathTileViews.get(cell);if(pathTile)pathTile.visible=false
-      const rimMat=new THREE.MeshStandardMaterial({color:'#5e3049',emissive:'#180914',roughness:.84})
-      const shaftMat=new THREE.MeshStandardMaterial({color:'#35233f',emissive:'#170d21',emissiveIntensity:.55,roughness:.9,side:THREE.DoubleSide})
-      for(const side of [-1,1]){
-        const horizontalRim=new THREE.Mesh(new THREE.BoxGeometry(.98,.07,.07),rimMat);horizontalRim.position.set(0,.02,side*.455);group.add(horizontalRim)
-        const verticalRim=new THREE.Mesh(new THREE.BoxGeometry(.07,.07,.84),rimMat);verticalRim.position.set(side*.455,.02,0);group.add(verticalRim)
-        const horizontalShaft=new THREE.Mesh(new THREE.BoxGeometry(.9,1.55,.055),shaftMat);horizontalShaft.position.set(0,-.78,side*.46);group.add(horizontalShaft)
-        const verticalShaft=new THREE.Mesh(new THREE.BoxGeometry(.055,1.55,.9),shaftMat);verticalShaft.position.set(side*.46,-.78,0);group.add(verticalShaft)
-      }
-      group.position.set(x,0,z);scene.add(group);holeViews.set(cell,group);holes.add(cell)
+      const edges:HoleEdges={north:createHoleEdge(true,-.455),south:createHoleEdge(true,.455),west:createHoleEdge(false,-.455),east:createHoleEdge(false,.455)}
+      Object.values(edges).forEach(edge=>group.add(edge));group.position.set(x,0,z);scene.add(group);holeViews.set(cell,{group,edges});holes.add(cell);updateHoleConnections()
     }
     const syncHoleViews=(activeHoles:string[])=>{
       const active=new Set(activeHoles)
-      for(const [cell,group] of holeViews)if(!active.has(cell)){scene.remove(group);holeViews.delete(cell);holes.delete(cell);setFloorCellVisible(cell,true);const pathTile=pathTileViews.get(cell);if(pathTile)pathTile.visible=true}
+      for(const [cell,view] of holeViews)if(!active.has(cell)){scene.remove(view.group);holeViews.delete(cell);holes.delete(cell);setFloorCellVisible(cell,true);const pathTile=pathTileViews.get(cell);if(pathTile)pathTile.visible=true}
       activeHoles.forEach(addHoleView)
+      updateHoleConnections()
     }
     const itemViews=new Map<string,ItemView>()
     const itemColors:Record<ItemKind,string>={KICK:'#ff9b4a',THROW:'#c982ff',CAPACITY:'#56f1b7',PIERCE:'#fff36c'}
@@ -218,7 +225,7 @@ export default function SplashArena({onExit,networkSession}:{onExit:()=>void;net
       const shadow=new THREE.Mesh(shadowGeo,shadowMat);shadow.rotation.x=-Math.PI/2;shadow.position.set(x,.025,z);scene.add(shadow)
       const rescueRing=new THREE.Mesh(new THREE.TorusGeometry(.56,.055,10,32),new THREE.MeshBasicMaterial({color:team==='cyan'?'#68efff':'#ff7884',transparent:true,opacity:.85,depthWrite:false,toneMapped:false}))
       rescueRing.rotation.x=-Math.PI/2;rescueRing.position.set(x,.12,z);rescueRing.visible=false;scene.add(rescueRing)
-      return{id,name,team,isPlayer,model,rig,materials,shadow,rescueRing,baseScale:model.scale.x,x,z,serverX:x,serverZ:z,renderX:x,renderZ:z,targetX:x,targetZ:z,lastRenderX:x,lastRenderZ:z,walkPhase:0,walkBlend:0,yaw,targetYaw:yaw,hits:0,bombCapacity:GAME_BALANCE.CORE_CAPACITY,canKick:false,canThrow:false,pierceCharges:0,jumpY:0,jumpStarted:0,jumpUntil:0,jumpBaseY:0,buildReady:0,lockedUntil:0,downedUntil:0,eliminated:false,dashReady:0}
+      return{id,name,team,isPlayer,model,rig,materials,shadow,rescueRing,baseScale:model.scale.x,x,z,serverX:x,serverZ:z,renderX:x,renderZ:z,targetX:x,targetZ:z,lastRenderX:x,lastRenderZ:z,walkPhase:0,walkBlend:0,yaw,targetYaw:yaw,hits:0,bombCapacity:GAME_BALANCE.CORE_CAPACITY,canKick:false,canThrow:false,pierceCharges:0,jumpY:0,jumpStarted:0,jumpUntil:0,jumpBaseY:0,buildReady:0,falling:false,fallVelocity:0,lockedUntil:0,downedUntil:0,eliminated:false,dashReady:0}
     }
     const [spawnBloo,spawnLumi,spawnCoral,spawnVio]=GIANT_PLAYROOM.spawnPoints
     const player=createActor('bloo','BLOO','cyan',true,'bloo',spawnBloo.x,spawnBloo.z,1.04)
@@ -282,27 +289,29 @@ export default function SplashArena({onExit,networkSession}:{onExit:()=>void;net
     const say=(message:string)=>setUi(v=>({...v,message}))
     const setActorDownedVisual=(actor:Actor,downed:boolean)=>{actor.materials.forEach(material=>{material.opacity=downed ? .46 : 1;material.depthWrite=!downed});actor.model.scale.setScalar(actor.baseScale*(downed ? .72 : 1))}
 
-    const addCoreView=(owner:string,team:Team,gx:number,gz:number,fuse:number,networkId?:string,piercing=false)=>{
+    const addCoreView=(owner:string,team:Team,gx:number,gz:number,fuse:number,networkId?:string,piercing=false,y=0)=>{
       const group=new THREE.Group()
       const orbMaterial=piercing?coreMaterials[team].clone():coreMaterials[team],orb=new THREE.Mesh(coreGeo,orbMaterial);orb.position.y=.41;orb.castShadow=true;group.add(orb)
       const ring=new THREE.Mesh(new THREE.RingGeometry(.43,.52,32),new THREE.MeshBasicMaterial({color:team==='cyan'?'#baffff':'#ffc1b7',transparent:true,opacity:.82,side:THREE.DoubleSide}))
-      ring.rotation.x=-Math.PI/2;ring.position.y=.035;group.add(ring);group.position.set(gx,0,gz);scene.add(group)
+      ring.rotation.x=-Math.PI/2;ring.position.y=.035;group.add(ring);group.position.set(gx,y,gz);scene.add(group)
       if(piercing){orb.scale.setScalar(1.14);(orb.material as THREE.MeshStandardMaterial).color.set('#fff36c');(orb.material as THREE.MeshStandardMaterial).emissive.set('#ff8a24')}
-      cores.push({id:++coreId,networkId,group,x:gx,z:gz,fuse,owner,team,piercing,ring});return true
+      cores.push({id:++coreId,networkId,group,x:gx,y,z:gz,fuse,owner,team,piercing,ring});return true
     }
     const placeCore=(actor:Actor,x:number,z:number,fuse:number=GAME_BALANCE.CORE_FUSE_SECONDS)=>{
       const {x:gx,z:gz}=worldToGrid({x,z})
-      if(actor.eliminated||actor.downedUntil||blocked(gx,gz)||holes.has(`${gx},${gz}`)||cores.some(c=>c.x===gx&&c.z===gz)||!canPlaceCore(cores.filter(c=>c.owner===actor.id).length,actor.bombCapacity))return false
+      const key=`${gx},${gz}`,onObstacle=arenaState.walls.has(key)&&Math.abs(actor.jumpY-GAME_BALANCE.OBSTACLE_TOP_Y)<.18
+      if(actor.eliminated||actor.falling||actor.downedUntil||(blocked(gx,gz)&&!onObstacle)||holes.has(key)||cores.some(c=>c.x===gx&&c.z===gz)||!canPlaceCore(cores.filter(c=>c.owner===actor.id).length,actor.bombCapacity))return false
       const piercing=actor.pierceCharges>0;if(piercing)actor.pierceCharges--
-      return addCoreView(actor.id,actor.team,gx,gz,fuse,undefined,piercing)
+      return addCoreView(actor.id,actor.team,gx,gz,fuse,undefined,piercing,onObstacle?GAME_BALANCE.OBSTACLE_TOP_Y:0)
     }
     const rayCells=(core:Core)=>core.piercing?tracePiercingExplosion(arenaState,{x:core.x,z:core.z},GAME_BALANCE.CORE_RANGE):traceExplosion(arenaState,{x:core.x,z:core.z},GAME_BALANCE.CORE_RANGE)
     const actorCanOccupy=(actor:Actor,x:number,z:number)=>{
       const gx=Math.round(x),gz=Math.round(z)
       if(Math.abs(gx)>HALF_X||Math.abs(gz)>HALF_Z||((arenaState.walls.has(`${gx},${gz}`))&&actor.jumpY<GAME_BALANCE.OBSTACLE_TOP_Y-.12))return false
-      return !actors.some(other=>other!==actor&&!other.eliminated&&Math.hypot(other.x-x,other.z-z)<GAME_BALANCE.PLAYER_RADIUS*2)
+      return !actors.some(other=>other!==actor&&!other.eliminated&&!other.falling&&Math.hypot(other.x-x,other.z-z)<GAME_BALANCE.PLAYER_RADIUS*2)
     }
     const knockActor=(actor:Actor,originX:number,originZ:number)=>{
+      if(actor.falling)return
       let dx=actor.x-originX,dz=actor.z-originZ,length=Math.hypot(dx,dz)
       if(length<.05){const slot=actors.indexOf(actor);dx=slot%2?-1:1;dz=slot<2?-1:1;length=Math.hypot(dx,dz)}
       dx/=length;dz/=length
@@ -311,7 +320,7 @@ export default function SplashArena({onExit,networkSession}:{onExit:()=>void;net
       actor.targetX=actor.x;actor.targetZ=actor.z
     }
     const hit=(actor:Actor,cells:{x:number;z:number}[],now:number,originX:number,originZ:number)=>{
-      if(actor.eliminated||actor.downedUntil||now<actor.lockedUntil)return
+      if(actor.eliminated||actor.falling||actor.downedUntil||now<actor.lockedUntil)return
       if(cells.some(cell=>Math.abs(cell.x-actor.x)<.62&&Math.abs(cell.z-actor.z)<.62)){
         knockActor(actor,originX,originZ);actor.hits++;shake=Math.max(shake,.42)
         if(actor.hits>=3){
@@ -326,21 +335,21 @@ export default function SplashArena({onExit,networkSession}:{onExit:()=>void;net
       }
     }
     const rescue=(rescuer:Actor,target:Actor,now:number)=>{
-      if(rescuer.eliminated||rescuer.downedUntil||target.eliminated||!target.downedUntil||rescuer.team!==target.team)return false
+      if(rescuer.eliminated||rescuer.falling||rescuer.downedUntil||target.eliminated||target.falling||!target.downedUntil||rescuer.team!==target.team)return false
       if(Math.hypot(rescuer.x-target.x,rescuer.z-target.z)>1.45)return false
       target.hits=2;target.downedUntil=0;target.lockedUntil=now+650;setActorDownedVisual(target,false);target.rescueRing.visible=false
       say(`${rescuer.name} → ${target.name} RESCUE! 팀이 전장에 복귀했습니다`);audio.rescue();shake=Math.max(shake,.2);return true
     }
     const eliminate=(actor:Actor)=>{
-      actor.eliminated=true;actor.downedUntil=0;actor.model.visible=false;actor.shadow.visible=false;actor.rescueRing.visible=false
+      actor.eliminated=true;actor.falling=false;actor.downedUntil=0;actor.model.visible=false;actor.shadow.visible=false;actor.rescueRing.visible=false
       say(`${actor.name} ELIMINATED`)
       const cyanAlive=actors.filter(item=>item.team==='cyan'&&!item.eliminated).length
       const coralAlive=actors.filter(item=>item.team==='coral'&&!item.eliminated).length
       if(!ended&&(!cyanAlive||!coralAlive)){ended=true;setResult(cyanAlive?'win':'lose')}
     }
-    const spawnExplosion=(x:number,z:number,team:Team,now:number,chain:number,piercing=false)=>{
+    const spawnExplosion=(x:number,z:number,team:Team,now:number,chain:number,piercing=false,y=0)=>{
       const cells=piercing?tracePiercingExplosion(arenaState,{x,z},GAME_BALANCE.CORE_RANGE):traceExplosion(arenaState,{x,z},GAME_BALANCE.CORE_RANGE),burst=bursts.find(item=>!item.active)??bursts.reduce((oldest,item)=>item.born<oldest.born?item:oldest),color=piercing?'#fff36c':team==='cyan'?'#0aa9d6':'#d92f4d'
-      burst.active=true;burst.born=now;burst.group.visible=true;burst.group.position.set(x,0,z);burst.group.scale.setScalar(1);burst.material.color.set(color);burst.material.emissive.set(color);burst.material.opacity=.88
+      burst.active=true;burst.born=now;burst.group.visible=true;burst.group.position.set(x,y,z);burst.group.scale.setScalar(1);burst.material.color.set(color);burst.material.emissive.set(color);burst.material.opacity=.88
       ;(burst.shock.material as THREE.MeshBasicMaterial).color.set(color);(burst.shock.material as THREE.MeshBasicMaterial).opacity=.38;burst.shock.scale.setScalar(.3);burst.light.color.set(color);burst.light.intensity=20
       burst.cells=cells.map(cell=>({x:cell.x-x,z:cell.z-z}));burst.pulses.count=cells.length;burst.ribbons.count=Math.max(0,cells.length-1);burst.rings.count=cells.length
       cells.forEach((cell,index)=>{
@@ -360,7 +369,7 @@ export default function SplashArena({onExit,networkSession}:{onExit:()=>void;net
     }
     const dropLocalItem=(x:number,z:number)=>{const kind=itemForRoll(Math.random());if(kind)addItemView(`local-item-${++localItemId}`,kind,x,z)}
     const explode=(core:Core,now:number,chain:number)=>{
-      const cells=spawnExplosion(core.x,core.z,core.team,now,chain,core.piercing)
+      const cells=spawnExplosion(core.x,core.z,core.team,now,chain,core.piercing,core.y)
       const wallHits=core.piercing?cells.filter(cell=>arenaState.walls.has(`${cell.x},${cell.z}`)):blastHitWalls(arenaState,{x:core.x,z:core.z},GAME_BALANCE.CORE_RANGE)
       actors.forEach(actor=>hit(actor,cells,now,core.x,core.z));wallHits.forEach(wall=>{destroyWallView(`${wall.x},${wall.z}`);if(!core.piercing)dropLocalItem(wall.x,wall.z)});if(wallHits.length)say(`BLOCK SHATTER ×${wallHits.length} · 아이템을 확인하세요`)
       if(core.piercing)for(const cell of piercingFloorCells(core,cells,GIANT_PLAYROOM.spawnPoints)){destroyWallView(`${cell.x},${cell.z}`,false);addHoleView(`${cell.x},${cell.z}`)}
@@ -370,7 +379,7 @@ export default function SplashArena({onExit,networkSession}:{onExit:()=>void;net
       scene.remove(core.group);const index=cores.indexOf(core);if(index>=0)cores.splice(index,1)
     }
     const move=(actor:Actor,dx:number,dz:number,speed:number,dt:number,faceMovement=true)=>{
-      if(actor.eliminated||actor.downedUntil)return
+      if(actor.eliminated||actor.falling||actor.downedUntil)return
       const output=performance.now()<actor.lockedUntil ? .42 : 1
       const nx=actor.x+dx*speed*output*dt,nz=actor.z+dz*speed*output*dt
       if(actorCanOccupy(actor,nx,actor.z))actor.x=THREE.MathUtils.clamp(nx,-HALF_X-.28,HALF_X+.28)
@@ -380,6 +389,7 @@ export default function SplashArena({onExit,networkSession}:{onExit:()=>void;net
       actor.targetX=actor.x;actor.targetZ=actor.z
     }
     const dash=()=>{
+      if(controlled.falling)return
       if(networkClient){networkClient.send({type:'ACTION',seq:++inputSequence,action:'DASH',direction:cardinalDirection()});audio.dash();say('RIPPLE DASH · SERVER VALIDATING');return}
       const now=performance.now();if(now<controlled.dashReady||now<controlled.lockedUntil)return
       controlled.dashReady=now+GAME_BALANCE.DASH_COOLDOWN_MS
@@ -401,35 +411,40 @@ export default function SplashArena({onExit,networkSession}:{onExit:()=>void;net
       return toX===fromX&&toZ===fromZ?null:{core:nearest.core,fromX,fromZ,toX,toZ}
     }
     const kick=()=>{
+      if(controlled.falling)return
       if(!controlled.canKick){say('밀기 아이템을 먼저 획득하세요');return}
       if(networkClient){networkClient.send({type:'ACTION',seq:++inputSequence,action:'KICK',direction:cardinalDirection()});audio.kick();say('CORE KICK · SERVER VALIDATING');return}
       const nearest=cores.filter(core=>!core.flight).map(core=>({core,distance:Math.hypot(core.x-controlled.x,core.z-controlled.z)})).sort((a,b)=>a.distance-b.distance)[0]
       if(!nearest||nearest.distance>1.55){say('가까운 Core가 없습니다');return}
       const direction=cardinalDirection(),nx=nearest.core.x+direction.x,nz=nearest.core.z+direction.z
-      if(!blocked(nx,nz)&&!cores.some(core=>core!==nearest.core&&core.x===nx&&core.z===nz)){nearest.core.x=nx;nearest.core.z=nz;nearest.core.group.position.set(nx,0,nz);audio.kick();say('Core를 밀어 경로를 바꿨습니다!')}
+      if(!blocked(nx,nz)&&!cores.some(core=>core!==nearest.core&&core.x===nx&&core.z===nz)){nearest.core.x=nx;nearest.core.y=0;nearest.core.z=nz;nearest.core.group.position.set(nx,0,nz);audio.kick();say('Core를 밀어 경로를 바꿨습니다!')}
     }
     const throwCore=()=>{
+      if(controlled.falling)return
       if(!controlled.canThrow){say('던지기 아이템을 먼저 획득하세요');return}
       const plan=getThrowPlan()
       if(!plan){say('던질 수 있는 가까운 Core 또는 착지 경로가 없습니다');return}
       if(networkClient){networkClient.send({type:'ACTION',seq:++inputSequence,action:'THROW',direction:cardinalDirection()});audio.throwCore();say('CORE THROW · SERVER VALIDATING');return}
-      plan.core.x=plan.toX;plan.core.z=plan.toZ;plan.core.ring.visible=false
-      plan.core.flight={fromX:plan.fromX,fromZ:plan.fromZ,toX:plan.toX,toZ:plan.toZ,start:performance.now(),duration:GAME_BALANCE.THROW_DURATION_MS}
+      const fromY=plan.core.y;plan.core.x=plan.toX;plan.core.y=0;plan.core.z=plan.toZ;plan.core.ring.visible=false
+      plan.core.flight={fromX:plan.fromX,fromY,fromZ:plan.fromZ,toX:plan.toX,toY:0,toZ:plan.toZ,start:performance.now(),duration:GAME_BALANCE.THROW_DURATION_MS}
       audio.throwCore();shake=.09;say('CORE THROW! 착지 지점에서 파동 경로를 다시 계산합니다')
     }
     const rescueAlly=()=>{
+      if(controlled.falling)return
       if(networkClient){networkClient.send({type:'ACTION',seq:++inputSequence,action:'RESCUE',direction:cardinalDirection()});say('RESCUE · SERVER VALIDATING');return}
       const target=actors.filter(actor=>actor.team===controlled.team&&actor!==controlled&&actor.downedUntil&&!actor.eliminated).sort((a,b)=>Math.hypot(a.x-controlled.x,a.z-controlled.z)-Math.hypot(b.x-controlled.x,b.z-controlled.z))[0]
       if(!target||!rescue(controlled,target,performance.now()))say('구조할 수 있는 아군에게 더 가까이 가세요')
     }
     const jump=()=>{
+      if(controlled.falling)return
       if(networkClient){networkClient.send({type:'ACTION',seq:++inputSequence,action:'JUMP',direction:cardinalDirection()});return}
       const now=performance.now();if(now<controlled.jumpUntil)return
       controlled.jumpBaseY=controlled.jumpY;controlled.jumpStarted=now;controlled.jumpUntil=now+GAME_BALANCE.JUMP_DURATION_MS;say('JUMP! 장애물과 구멍을 뛰어넘으세요')
     }
     const buildWall=()=>{
-      if(networkClient){networkClient.send({type:'ACTION',seq:++inputSequence,action:'BUILD',direction:cardinalDirection()});say('BLOCK BUILD · SERVER VALIDATING');return}
       const now=performance.now();if(now<controlled.buildReady)return
+      if(controlled.falling)return
+      if(networkClient){controlled.buildReady=now+GAME_BALANCE.BUILD_COOLDOWN_MS;networkClient.send({type:'ACTION',seq:++inputSequence,action:'BUILD',direction:cardinalDirection()});say('BLOCK BUILD · SERVER VALIDATING');return}
       const direction=cardinalDirection(),cell=worldToGrid({x:controlled.x+direction.x*1.05,z:controlled.z+direction.z*1.05}),key=`${cell.x},${cell.z}`
       if(Math.abs(cell.x)>HALF_X||Math.abs(cell.z)>HALF_Z||arenaState.walls.has(key)||holes.has(key)||cores.some(core=>core.x===cell.x&&core.z===cell.z)||actors.some(actor=>!actor.eliminated&&Math.hypot(actor.x-cell.x,actor.z-cell.z)<.72)){say('그 위치에는 장애물을 설치할 수 없습니다');return}
       arenaState.walls.add(key);createWallView(key,wallViews.size);controlled.buildReady=now+GAME_BALANCE.BUILD_COOLDOWN_MS;say('BLOCK BUILD! 방어 경로를 만들었습니다')
@@ -446,8 +461,9 @@ export default function SplashArena({onExit,networkSession}:{onExit:()=>void;net
       snapshot.players.forEach(state=>{
         const actor=actors[state.slot];if(!actor)return
         actor.targetYaw=state.yaw
-        actor.networkId=state.id;actor.x=state.x;actor.z=state.z;actor.serverX=state.x;actor.serverZ=state.z;actor.targetX=state.x;actor.targetZ=state.z;actor.hits=state.hits;actor.bombCapacity=state.bombCapacity;actor.canKick=state.canKick;actor.canThrow=state.canThrow;actor.pierceCharges=state.pierceCharges;actor.jumpY=state.jumpY;actor.downedUntil=state.downedUntil;actor.eliminated=state.eliminated
-        actor.model.visible=!state.eliminated;actor.shadow.visible=!state.eliminated;actor.rescueRing.visible=!!state.downedUntil&&!state.eliminated;setActorDownedVisual(actor,!!state.downedUntil)
+        const falling=state.falling??false
+        actor.networkId=state.id;actor.x=state.x;actor.z=state.z;actor.serverX=state.x;actor.serverZ=state.z;actor.targetX=state.x;actor.targetZ=state.z;actor.hits=state.hits;actor.bombCapacity=state.bombCapacity;actor.canKick=state.canKick;actor.canThrow=state.canThrow;actor.pierceCharges=state.pierceCharges;actor.jumpY=state.jumpY;actor.buildReady=sampleNow+Math.max(0,(state.buildReady??0)-snapshot.serverTime);actor.falling=falling;actor.downedUntil=state.downedUntil;actor.eliminated=state.eliminated
+        actor.model.visible=!state.eliminated;actor.shadow.visible=!state.eliminated&&!falling;actor.rescueRing.visible=!!state.downedUntil&&!state.eliminated&&!falling;setActorDownedVisual(actor,!!state.downedUntil)
         if(state.id===localNetworkId){
           controlled=actor;pendingInputs=pendingInputs.filter(input=>input.seq>state.lastInput)
           pendingInputs.forEach(input=>move(actor,input.dx,input.dz,GAME_BALANCE.PLAYER_SPEED,input.dt));actor.targetX=actor.x;actor.targetZ=actor.z
@@ -457,11 +473,11 @@ export default function SplashArena({onExit,networkSession}:{onExit:()=>void;net
       for(let index=cores.length-1;index>=0;index--){const core=cores[index];if(core.networkId&&!serverCoreIds.has(core.networkId)){scene.remove(core.group);cores.splice(index,1)}}
       snapshot.cores.forEach(state=>{
         let core=cores.find(item=>item.networkId===state.id)
-        if(!core){addCoreView(state.owner,state.team,state.x,state.z,state.fuse,state.id,state.piercing);core=cores.at(-1)}
+        if(!core){addCoreView(state.owner,state.team,state.x,state.z,state.fuse,state.id,state.piercing,state.y??0);core=cores.at(-1)}
         if(core){
-          const moved=Math.hypot(state.x-core.x,state.z-core.z)>1.1
-          if(moved&&!core.flight){core.flight={fromX:core.x,fromZ:core.z,toX:state.x,toZ:state.z,start:performance.now(),duration:GAME_BALANCE.THROW_DURATION_MS};core.ring.visible=false}
-          core.owner=state.owner;core.team=state.team;core.x=state.x;core.z=state.z;core.fuse=state.fuse;core.piercing=state.piercing;if(!core.flight)core.group.position.set(state.x,0,state.z)
+          const moved=Math.hypot(state.x-core.x,state.z-core.z)>1.1,coreY=state.y??0
+          if(moved&&!core.flight){core.flight={fromX:core.x,fromY:core.y,fromZ:core.z,toX:state.x,toY:coreY,toZ:state.z,start:performance.now(),duration:GAME_BALANCE.THROW_DURATION_MS};core.ring.visible=false}
+          core.owner=state.owner;core.team=state.team;core.x=state.x;core.y=coreY;core.z=state.z;core.fuse=state.fuse;core.piercing=state.piercing;if(!core.flight)core.group.position.set(state.x,coreY,state.z)
         }
       })
       if(snapshot.ended&&snapshot.winner&&!ended){ended=true;setResult(snapshot.winner==='draw'||snapshot.winner===controlled.team?'win':'lose')}
@@ -475,8 +491,8 @@ export default function SplashArena({onExit,networkSession}:{onExit:()=>void;net
       if(message.type==='SNAPSHOT')syncNetworkSnapshot(message.snapshot)
       if(message.type==='ERROR')say(`NETWORK ERROR · ${message.message}`)
       if(message.type==='GAME_EVENT'){
-        const labels:Record<string,string>={PLAYER_RESCUED:'TEAM RESCUE!',PLAYER_FLUX_LOCKED:'FLUX LOCKED!',PLAYER_ELIMINATED:'RIPPLE ELIMINATED',PLAYER_FELL:'VOID FALL · 즉시 탈락!',PLAYER_JUMPED:'JUMP!',PLAYER_KNOCKED:'IMPACT KNOCKBACK',CORE_THROWN:'SERVER CORE THROW',CORE_KICKED:'SERVER CORE KICK',CORE_EXPLODED:'3D SPLASH DISCHARGE · SERVER SYNC',OBJECT_DESTROYED:'BLOCK SHATTERED · 아이템을 확인하세요',FLOOR_DESTROYED:'PIERCE SPLASH · 바닥 붕괴!',WALL_BUILT:'BLOCK BUILD!',ITEM_COLLECTED:`${message.kind??'POWER'} ITEM 획득!`,VEHICLE_CORE_PUSH:'TOY EXPRESS MOVED A CORE',VEHICLE_PLAYER_PUSH:'TOY EXPRESS IMPACT!',MATCH_RESTARTED:'READY · ROOM REMATCH',MATCH_STARTED:'SPLASH! 예측하고, 연결하고, 탈출하세요'}
-        if(message.event==='CORE_EXPLODED'&&message.x!==undefined&&message.z!==undefined&&message.team)spawnExplosion(message.x,message.z,message.team,performance.now(),message.chain??1,message.piercing)
+        const labels:Record<string,string>={PLAYER_RESCUED:'TEAM RESCUE!',PLAYER_FLUX_LOCKED:'FLUX LOCKED!',PLAYER_ELIMINATED:'RIPPLE ELIMINATED',PLAYER_FALLING:'VOID FALL · 추락 중!',PLAYER_FELL:'VOID FALL · 탈락!',PLAYER_JUMPED:'JUMP!',PLAYER_KNOCKED:'IMPACT KNOCKBACK',CORE_THROWN:'SERVER CORE THROW',CORE_KICKED:'SERVER CORE KICK',CORE_EXPLODED:'3D SPLASH DISCHARGE · SERVER SYNC',OBJECT_DESTROYED:'BLOCK SHATTERED · 아이템을 확인하세요',FLOOR_DESTROYED:'PIERCE SPLASH · 바닥 붕괴!',WALL_BUILT:'BLOCK BUILD!',ITEM_COLLECTED:`${message.kind??'POWER'} ITEM 획득!`,VEHICLE_CORE_PUSH:'TOY EXPRESS MOVED A CORE',VEHICLE_PLAYER_PUSH:'TOY EXPRESS IMPACT!',MATCH_RESTARTED:'READY · ROOM REMATCH',MATCH_STARTED:'SPLASH! 예측하고, 연결하고, 탈출하세요'}
+        if(message.event==='CORE_EXPLODED'&&message.x!==undefined&&message.z!==undefined&&message.team)spawnExplosion(message.x,message.z,message.team,performance.now(),message.chain??1,message.piercing,message.y??0)
         if(message.event==='OBJECT_DESTROYED'&&message.x!==undefined&&message.z!==undefined)destroyWallView(`${message.x},${message.z}`)
         if((message.event==='CHAIN_STARTED'||message.event==='CHAIN_EXTENDED')&&message.chain){chainBest=Math.max(chainBest,message.chain);say(`CHAIN ×${message.chain}! SERVER AUTHORITATIVE`)}
         if(message.event==='CORE_PLACED')audio.place()
@@ -492,7 +508,7 @@ export default function SplashArena({onExit,networkSession}:{onExit:()=>void;net
       if((networkClient?networkCountdown:Math.ceil((countdownEnds-performance.now())/1000))>0||ended)return
       keys.add(event.key.toLowerCase())
       if(event.code==='Space'&&!event.repeat)jump()
-      if(event.key.toLowerCase()==='f'&&performance.now()-lastPlace>280){lastPlace=performance.now();if(networkClient){networkClient.send({type:'ACTION',seq:++inputSequence,action:'PLACE',direction:cardinalDirection()});say('CORE PLACED · SERVER VALIDATING')}else if(placeCore(controlled,controlled.x,controlled.z)){audio.place();say('Splash Core 설치 — 기존 Core가 터지면 슬롯이 돌아옵니다')}}
+      if(event.key.toLowerCase()==='f'&&!controlled.falling&&performance.now()-lastPlace>280){lastPlace=performance.now();if(networkClient){networkClient.send({type:'ACTION',seq:++inputSequence,action:'PLACE',direction:cardinalDirection()});say('CORE PLACED · SERVER VALIDATING')}else if(placeCore(controlled,controlled.x,controlled.z)){audio.place();say('Splash Core 설치 — 기존 Core가 터지면 슬롯이 돌아옵니다')}}
       if(event.key==='Shift')dash()
       if(event.key.toLowerCase()==='e')kick()
       if(event.key.toLowerCase()==='q'&&!event.repeat){if(controlled.canThrow){aiming=true;say('CORE THROW · Q를 누른 채 마우스로 착지 방향을 조준하세요')}else say('던지기 아이템을 먼저 획득하세요')}
@@ -518,7 +534,11 @@ export default function SplashArena({onExit,networkSession}:{onExit:()=>void;net
       if(ended)return
       if((networkClient?networkCountdown:Math.ceil((countdownEnds-now)/1000))>0)return
       elapsed+=dt
-      if(!networkClient)actors.forEach(actor=>{actor.jumpY=now<actor.jumpUntil?actor.jumpBaseY+Math.sin(Math.max(0,Math.min(1,(now-actor.jumpStarted)/GAME_BALANCE.JUMP_DURATION_MS))*Math.PI)*GAME_BALANCE.JUMP_HEIGHT:(arenaState.walls.has(`${Math.round(actor.x)},${Math.round(actor.z)}`)?GAME_BALANCE.OBSTACLE_TOP_Y:0)})
+      if(!networkClient)actors.forEach(actor=>{
+        if(actor.eliminated)return
+        if(actor.falling){actor.fallVelocity+=GAME_BALANCE.FALL_GRAVITY*dt;actor.jumpY-=actor.fallVelocity*dt;if(actor.jumpY<=GAME_BALANCE.FALL_DEATH_Y)eliminate(actor);return}
+        actor.jumpY=now<actor.jumpUntil?actor.jumpBaseY+Math.sin(Math.max(0,Math.min(1,(now-actor.jumpStarted)/GAME_BALANCE.JUMP_DURATION_MS))*Math.PI)*GAME_BALANCE.JUMP_HEIGHT:(arenaState.walls.has(`${Math.round(actor.x)},${Math.round(actor.z)}`)?GAME_BALANCE.OBSTACLE_TOP_Y:0)
+      })
       let side=0,forwardInput=0
       if(keys.has('a')||keys.has('arrowleft'))side--
       if(keys.has('d')||keys.has('arrowright'))side++
@@ -541,7 +561,7 @@ export default function SplashArena({onExit,networkSession}:{onExit:()=>void;net
           lastFanPush=now
           cores.filter(core=>!core.flight).sort((a,b)=>a.x-b.x).forEach(core=>{
             const nx=core.x-1
-            if(!blocked(nx,core.z)&&!cores.some(other=>other!==core&&other.x===nx&&other.z===core.z)){core.x=nx;core.group.position.x=nx}
+            if(!blocked(nx,core.z)&&!cores.some(other=>other!==core&&other.x===nx&&other.z===core.z)){core.x=nx;core.y=0;core.group.position.set(nx,0,core.z)}
           })
         }
       }
@@ -551,14 +571,14 @@ export default function SplashArena({onExit,networkSession}:{onExit:()=>void;net
           const vehicleCell=Math.round(vehicleX)
           if(vehicleCell!==lastVehicleCell){
             lastVehicleCell=vehicleCell
-            cores.filter(core=>!core.flight&&Math.abs(core.x-vehicleX)<.8&&Math.abs(core.z-1)<.7).forEach(core=>{const nx=core.x+1;if(!blocked(nx,core.z)&&!cores.some(other=>other!==core&&other.x===nx&&other.z===core.z)){core.x=nx;core.group.position.x=nx;say('TOY EXPRESS가 Core를 다음 격자로 밀었습니다!')}})
-            actors.filter(actor=>!actor.eliminated&&Math.abs(actor.x-vehicleX)<.78&&Math.abs(actor.z-1)<.72).forEach(actor=>{knockActor(actor,vehicleX-1,1);say('TOY EXPRESS IMPACT! 트랙에서 벗어나세요')})
+            cores.filter(core=>!core.flight&&Math.abs(core.x-vehicleX)<.8&&Math.abs(core.z-1)<.7).forEach(core=>{const nx=core.x+1;if(!blocked(nx,core.z)&&!cores.some(other=>other!==core&&other.x===nx&&other.z===core.z)){core.x=nx;core.y=0;core.group.position.set(nx,0,core.z);say('TOY EXPRESS가 Core를 다음 격자로 밀었습니다!')}})
+            actors.filter(actor=>!actor.eliminated&&!actor.falling&&Math.abs(actor.x-vehicleX)<.78&&Math.abs(actor.z-1)<.72).forEach(actor=>{knockActor(actor,vehicleX-1,1);say('TOY EXPRESS IMPACT! 트랙에서 벗어나세요')})
           }
         }else lastVehicleCell=-99
       }
       if(!networkClient){
-        actors.filter(actor=>!actor.eliminated&&actor.jumpY<.12&&holes.has(`${Math.round(actor.x)},${Math.round(actor.z)}`)).forEach(actor=>{say(`${actor.name}이 바닥 구멍으로 추락했습니다!`);eliminate(actor)})
-        for(const item of [...itemViews.values()]){const collector=actors.filter(actor=>!actor.eliminated).find(actor=>Math.hypot(actor.x-item.x,actor.z-item.z)<=GAME_BALANCE.ITEM_PICKUP_RADIUS);if(collector)collectLocalItem(collector,item)}
+        actors.filter(actor=>!actor.eliminated&&!actor.falling&&actor.jumpY<.12&&holes.has(`${Math.round(actor.x)},${Math.round(actor.z)}`)).forEach(actor=>{actor.falling=true;actor.fallVelocity=0;actor.jumpUntil=0;actor.shadow.visible=false;actor.rescueRing.visible=false;say(`${actor.name}이 바닥 구멍으로 추락하고 있습니다!`)})
+        for(const item of [...itemViews.values()]){const collector=actors.filter(actor=>!actor.eliminated&&!actor.falling).find(actor=>Math.hypot(actor.x-item.x,actor.z-item.z)<=GAME_BALANCE.ITEM_PICKUP_RADIUS);if(collector)collectLocalItem(collector,item)}
       }
       if(networkClient){
         cores.forEach(core=>{core.group.rotation.y+=dt*2.6;const pulse=1+Math.sin(now*.018)*.14;core.ring.scale.setScalar(pulse);(core.ring.material as THREE.MeshBasicMaterial).opacity=.35+Math.max(0,1-core.fuse/GAME_BALANCE.CORE_FUSE_SECONDS)*.6})
@@ -566,7 +586,7 @@ export default function SplashArena({onExit,networkSession}:{onExit:()=>void;net
       }
       const danger=cores.filter(core=>core.fuse<1.12).flatMap(rayCells)
       bots.forEach((brain,index)=>{
-        if(brain.eliminated||brain.downedUntil)return
+        if(brain.eliminated||brain.falling||brain.downedUntil)return
         const downedAlly=actors.filter(actor=>actor!==brain&&actor.team===brain.team&&actor.downedUntil&&!actor.eliminated).sort((a,b)=>Math.hypot(a.x-brain.x,a.z-brain.z)-Math.hypot(b.x-brain.x,b.z-brain.z))[0]
         const enemy=actors.filter(actor=>actor.team!==brain.team&&!actor.eliminated).sort((a,b)=>Math.hypot(a.x-brain.x,a.z-brain.z)-Math.hypot(b.x-brain.x,b.z-brain.z))[0]
         const target=downedAlly??enemy
@@ -598,8 +618,8 @@ export default function SplashArena({onExit,networkSession}:{onExit:()=>void;net
       cores.forEach(core=>{
         if(!core.flight)return
         const flight=core.flight,t=Math.min(1,(now-flight.start)/flight.duration),ease=t*t*(3-2*t)
-        core.group.position.set(THREE.MathUtils.lerp(flight.fromX,flight.toX,ease),Math.sin(t*Math.PI)*1.8,THREE.MathUtils.lerp(flight.fromZ,flight.toZ,ease))
-        if(t>=1){core.group.position.set(flight.toX,0,flight.toZ);core.ring.visible=true;core.flight=undefined}
+        core.group.position.set(THREE.MathUtils.lerp(flight.fromX,flight.toX,ease),THREE.MathUtils.lerp(flight.fromY,flight.toY,ease)+Math.sin(t*Math.PI)*1.8,THREE.MathUtils.lerp(flight.fromZ,flight.toZ,ease))
+        if(t>=1){core.group.position.set(flight.toX,flight.toY,flight.toZ);core.ring.visible=true;core.flight=undefined}
       })
       let itemFloatIndex=0;for(const item of itemViews.values()){item.group.position.y=.08+Math.sin(now*.004+itemFloatIndex++)*.08;item.group.rotation.y+=dt*1.7}
       const throwPlan=aiming?getThrowPlan():null
@@ -626,7 +646,7 @@ export default function SplashArena({onExit,networkSession}:{onExit:()=>void;net
       })
       actors.forEach((actor,index)=>{
         const x=networkClient?actor.renderX:actor.x,z=networkClient?actor.renderZ:actor.z
-        const travel=Math.hypot(x-actor.lastRenderX,z-actor.lastRenderZ),travelSpeed=travel/Math.max(dt,.001),canWalk=!actor.downedUntil&&!actor.eliminated
+        const travel=Math.hypot(x-actor.lastRenderX,z-actor.lastRenderZ),travelSpeed=travel/Math.max(dt,.001),canWalk=!actor.falling&&!actor.downedUntil&&!actor.eliminated
         const targetWalk=canWalk?THREE.MathUtils.clamp(travelSpeed/GAME_BALANCE.PLAYER_SPEED,0,1):0
         actor.walkBlend=THREE.MathUtils.lerp(actor.walkBlend,targetWalk,1-Math.exp(-dt*(targetWalk>actor.walkBlend?9:6.5)))
         if(travel>.0005)actor.walkPhase+=travel*8.4
@@ -643,8 +663,8 @@ export default function SplashArena({onExit,networkSession}:{onExit:()=>void;net
         actor.rig.rightLeg.position.y=THREE.MathUtils.lerp(actor.rig.rightLeg.position.y,.2+rightLift*.06,motionBlend)
         actor.rig.body.rotation.z=THREE.MathUtils.lerp(actor.rig.body.rotation.z,stride*.026,motionBlend)
         actor.yaw=lerpAngle(actor.yaw,actor.targetYaw,1-Math.exp(-dt*13));actor.model.rotation.y=actor.yaw
-        actor.model.rotation.x=THREE.MathUtils.lerp(actor.model.rotation.x,actor.walkBlend*.028,motionBlend)
-        actor.model.position.set(x,actor.jumpY+(leftLift+rightLift)*.006+Math.sin(now*.003+index)*.003,z);actor.shadow.position.set(x,.025,z);actor.shadow.scale.setScalar(1-THREE.MathUtils.clamp(actor.jumpY*.22,0,.3));(actor.shadow.material as THREE.MeshBasicMaterial).opacity=.42-THREE.MathUtils.clamp(actor.jumpY*.14,0,.2);actor.rescueRing.position.set(x,.13,z);actor.lastRenderX=x;actor.lastRenderZ=z
+        actor.model.rotation.x=THREE.MathUtils.lerp(actor.model.rotation.x,actor.falling?-.42:actor.walkBlend*.028,motionBlend);actor.model.rotation.z=THREE.MathUtils.lerp(actor.model.rotation.z,actor.falling?Math.sin(now*.008+index)*.2:0,motionBlend)
+        actor.model.position.set(x,actor.jumpY+(leftLift+rightLift)*.006+Math.sin(now*.003+index)*.003,z);actor.shadow.position.set(x,.025,z);actor.shadow.scale.setScalar(1-THREE.MathUtils.clamp(actor.jumpY*.22,0,.3));(actor.shadow.material as THREE.MeshBasicMaterial).opacity=actor.falling?0:.42-THREE.MathUtils.clamp(actor.jumpY*.14,0,.2);actor.rescueRing.position.set(x,.13,z);actor.lastRenderX=x;actor.lastRenderZ=z
         if(actor.rescueRing.visible){const pulse=1+Math.sin(now*.012+index)*.25;actor.rescueRing.scale.setScalar(pulse);actor.rescueRing.rotation.z+=dt*2.5}
       })
       if(debug){
@@ -688,7 +708,7 @@ export default function SplashArena({onExit,networkSession}:{onExit:()=>void;net
       const desiredCamera=new THREE.Vector3(controlledX-cameraForwardX*6.4,4.25,controlledZ-cameraForwardZ*6.4)
       if(shake>.002){desiredCamera.x+=(Math.random()-.5)*shake;desiredCamera.y+=(Math.random()-.5)*shake*.45;shake*=.88}
       camera.position.lerp(desiredCamera,1-Math.exp(-dt*6.2));camera.lookAt(controlledX+cameraForwardX*2.4,1.05,controlledZ+cameraForwardZ*2.4);renderer.render(scene,camera)
-      if(now-lastUi>100){lastUi=now;const ownerId=networkClient?localNetworkId:controlled.id;setUi(v=>({...v,time:Math.max(0,Math.floor(networkClient?networkRemaining:GAME_BALANCE.MATCH_SECONDS-elapsed)),countdown:presentedCountdown,localTeam:controlled.team,playerHits:controlled.hits,health:Math.max(0,3-controlled.hits),botHits:bot.hits,allyHits:ally.hits,rival2Hits:vio.hits,alliesAlive:actors.filter(actor=>actor.team===controlled.team&&!actor.eliminated&&actor.model.visible).length,rivalsAlive:actors.filter(actor=>actor.team!==controlled.team&&!actor.eliminated&&actor.model.visible).length,onlineHumans:networkHumanCount,cores:Math.max(0,controlled.bombCapacity-cores.filter(core=>core.owner===ownerId).length),capacity:controlled.bombCapacity,canKick:controlled.canKick,canThrow:controlled.canThrow,pierceCharges:controlled.pierceCharges,chain:chainBest,dash:Math.min(1,Math.max(0,(now-controlled.dashReady+GAME_BALANCE.DASH_COOLDOWN_MS)/GAME_BALANCE.DASH_COOLDOWN_MS)),fan:fanState,vehicle:vehicleActive,fps:Math.round(1/Math.max(.001,dt)),frameMs:Number((dt*1000).toFixed(1)),drawCalls:renderer.info.render.calls,triangles:renderer.info.render.triangles,textures:renderer.info.memory.textures,simBodies:actors.filter(actor=>actor.model.visible).length+cores.length+itemViews.size,rtt:networkRtt,packetRate,pendingInputs:pendingInputs.length,serverPos:`${controlled.serverX.toFixed(2)},${controlled.serverZ.toFixed(2)}`,clientPos:`${controlled.x.toFixed(2)},${controlled.z.toFixed(2)}`}))}
+      if(now-lastUi>100){lastUi=now;const ownerId=networkClient?localNetworkId:controlled.id;setUi(v=>({...v,time:Math.max(0,Math.floor(networkClient?networkRemaining:GAME_BALANCE.MATCH_SECONDS-elapsed)),countdown:presentedCountdown,localTeam:controlled.team,playerHits:controlled.hits,health:Math.max(0,3-controlled.hits),botHits:bot.hits,allyHits:ally.hits,rival2Hits:vio.hits,alliesAlive:actors.filter(actor=>actor.team===controlled.team&&!actor.eliminated&&actor.model.visible).length,rivalsAlive:actors.filter(actor=>actor.team!==controlled.team&&!actor.eliminated&&actor.model.visible).length,onlineHumans:networkHumanCount,cores:Math.max(0,controlled.bombCapacity-cores.filter(core=>core.owner===ownerId).length),capacity:controlled.bombCapacity,canKick:controlled.canKick,canThrow:controlled.canThrow,pierceCharges:controlled.pierceCharges,chain:chainBest,dash:Math.min(1,Math.max(0,(now-controlled.dashReady+GAME_BALANCE.DASH_COOLDOWN_MS)/GAME_BALANCE.DASH_COOLDOWN_MS)),build:Math.min(1,Math.max(0,(now-controlled.buildReady+GAME_BALANCE.BUILD_COOLDOWN_MS)/GAME_BALANCE.BUILD_COOLDOWN_MS)),fan:fanState,vehicle:vehicleActive,fps:Math.round(1/Math.max(.001,dt)),frameMs:Number((dt*1000).toFixed(1)),drawCalls:renderer.info.render.calls,triangles:renderer.info.render.triangles,textures:renderer.info.memory.textures,simBodies:actors.filter(actor=>actor.model.visible).length+cores.length+itemViews.size,rtt:networkRtt,packetRate,pendingInputs:pendingInputs.length,serverPos:`${controlled.serverX.toFixed(2)},${controlled.serverZ.toFixed(2)}`,clientPos:`${controlled.x.toFixed(2)},${controlled.z.toFixed(2)}`}))}
       frame=requestAnimationFrame(loop)
     }
     frame=requestAnimationFrame(loop)
@@ -711,7 +731,7 @@ export default function SplashArena({onExit,networkSession}:{onExit:()=>void;net
     <div className="message"><Sparkles/>{ui.message}</div>
     <div className="health-hud"><span>HP</span>{[0,1,2].map(index=><Heart key={index} className={index<ui.health?'filled':'empty'}/>)}</div>
     <aside className="status-panel"><span><Bot/> {networkSession?`ONLINE ${ui.onlineHumans}/4 · BOT FILL`:'3 BOT FILL · 2V2'}</span><span><Gauge/> 30 HZ LOGIC</span><span><Crosshair/> {debug?'DEBUG GRID + COLLIDERS':'HIDDEN GRID'}</span><span className={`fan-state ${ui.fan.toLowerCase()}`}><Wind/> FAN {ui.fan}</span>{ui.vehicle&&<span className="vehicle-state"><Zap/> TOY EXPRESS ACTIVE</span>}{debug&&<><span className="debug-stat">FPS {ui.fps} · {ui.frameMs} MS</span><span className="debug-stat">DRAW {ui.drawCalls} · TRIS {ui.triangles.toLocaleString()}</span><span className="debug-stat">TEX {ui.textures} · SIM BODIES {ui.simBodies}</span><span className="debug-stat">SERVER {ui.serverPos} · CLIENT {ui.clientPos}</span>{networkSession&&<><span className="debug-stat">RTT {ui.rtt} MS · RX {ui.packetRate}/S</span><span className="debug-stat">PENDING INPUT {ui.pendingInputs}</span></>}</>}</aside>
-    <section className="ability-bar"><div><kbd>F</kbd><span className="core-orb"/><p><b>SPLASH CORE</b><small>{ui.cores} / {ui.capacity} READY</small></p></div><div><kbd>SPACE</kbd><ArrowUp/><p><b>JUMP</b><small>벽과 구멍 넘기</small></p></div><div><kbd>C</kbd><Box/><p><b>BLOCK BUILD</b><small>기본 장애물 설치</small></p></div><div className={ui.dash<.99?'cooling':''}><kbd>SHIFT</kbd><Zap/><p><b>RIPPLE DASH</b><small>{ui.dash>=.99?'READY':'RECHARGING'}</small></p></div><div className={ui.canKick?'':'locked'}><kbd>E</kbd><HeartPulse/><p><b>CORE KICK</b><small>{ui.canKick?'ITEM READY':'ITEM LOCKED'}</small></p></div><div className={ui.canThrow?'':'locked'}><kbd>Q</kbd><Send/><p><b>CORE THROW</b><small>{ui.canThrow?'ITEM READY':'ITEM LOCKED'}</small></p></div>{(ui.chain>1||ui.pierceCharges>0)&&<strong>{ui.pierceCharges>0?`PIERCE ×${ui.pierceCharges}`:`CHAIN ×${ui.chain}`}</strong>}</section>
+    <section className="ability-bar"><div><kbd>F</kbd><span className="core-orb"/><p><b>SPLASH CORE</b><small>{ui.cores} / {ui.capacity} READY</small></p></div><div><kbd>SPACE</kbd><ArrowUp/><p><b>JUMP</b><small>벽과 구멍 넘기</small></p></div><div className={ui.build<.99?'cooling':''}><kbd>C</kbd><Box/><p><b>BLOCK BUILD</b><small>{ui.build>=.99?'READY':'COOLDOWN'}</small></p></div><div className={ui.dash<.99?'cooling':''}><kbd>SHIFT</kbd><Zap/><p><b>RIPPLE DASH</b><small>{ui.dash>=.99?'READY':'RECHARGING'}</small></p></div><div className={ui.canKick?'':'locked'}><kbd>E</kbd><HeartPulse/><p><b>CORE KICK</b><small>{ui.canKick?'ITEM READY':'ITEM LOCKED'}</small></p></div><div className={ui.canThrow?'':'locked'}><kbd>Q</kbd><Send/><p><b>CORE THROW</b><small>{ui.canThrow?'ITEM READY':'ITEM LOCKED'}</small></p></div>{(ui.chain>1||ui.pierceCharges>0)&&<strong>{ui.pierceCharges>0?`PIERCE ×${ui.pierceCharges}`:`CHAIN ×${ui.chain}`}</strong>}</section>
     <div className="controls">WASD 이동 <i/> SPACE 점프 <i/> F 폭탄 <i/> C 장애물 <i/> SHIFT 대시 <i/> E 밀기 <i/> Q 투척 <i/> R 구조</div>
     {ui.countdown>0&&<div className="match-countdown"><span>GET READY</span><strong>{ui.countdown}</strong><small>PREDICT · MANIPULATE · ESCAPE</small></div>}
     {result&&<div className="result-overlay"><div className={`result-panel ${result}`}><span>{result==='win'?'YOUR TEAM SECURED':'YOUR TEAM FLUX LOCKED'}</span><h1>{winnerTeam.names.replace(' · ',' & ')} WIN!</h1><p>{result==='win'?'연쇄 파동과 구조 타이밍으로 팀이 끝까지 살아남았습니다.':'아군이 잠긴 6초 동안 접근해 R로 구조하면 흐름을 뒤집을 수 있습니다.'}</p><div><button onClick={restart}><RotateCcw/> 한 판 더</button><button onClick={onExit}>로비로</button></div></div></div>}

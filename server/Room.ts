@@ -8,7 +8,7 @@ import { matchWinner } from '../src/game-core/rules'
 import { fanStateAt, vehicleStateAt } from '../src/game-core/timeline'
 
 type InputState={dx:number;dz:number;seq:number}
-type PlayerState=NetworkPlayer&{input:InputState;dashReady:number;nextAction:number;jumpStarted:number;jumpUntil:number;jumpBaseY:number;buildReady:number}
+type PlayerState=NetworkPlayer&{input:InputState;dashReady:number;nextAction:number;jumpStarted:number;jumpUntil:number;jumpBaseY:number;fallVelocity:number}
 type CoreState=NetworkCore&{fuse:number;chain:number}
 
 export class Room{
@@ -16,7 +16,7 @@ export class Room{
   readonly cores=new Map<string,CoreState>()
   readonly items=new Map<string,NetworkItem>()
   readonly holes=new Set<string>()
-  readonly events:Array<{event:string;actorId?:string;targetId?:string;coreId?:string;itemId?:string;kind?:ItemKind;x?:number;z?:number;team?:Team;chain?:number;piercing?:boolean}>=[]
+  readonly events:Array<{event:string;actorId?:string;targetId?:string;coreId?:string;itemId?:string;kind?:ItemKind;x?:number;y?:number;z?:number;team?:Team;chain?:number;piercing?:boolean}>=[]
   readonly arena={...GIANT_PLAYROOM,walls:new Set(GIANT_PLAYROOM.walls)}
   readonly destroyedWalls=new Set<string>()
   tick=0
@@ -41,7 +41,7 @@ export class Room{
     if(slot===undefined){const replaceable=[...this.players.values()].filter(player=>player.bot).sort((a,b)=>a.slot-b.slot)[0];if(replaceable){slot=replaceable.slot;this.leave(replaceable.id)}}
     if(slot===undefined)throw new Error('ROOM_FULL')
     const spawn=GIANT_PLAYROOM.spawnPoints[slot],team:Team=slot<2?'cyan':'coral',yaw=team==='cyan'?Math.PI/2:-Math.PI/2
-    const player:PlayerState={id,name:name.slice(0,16)||`RIPPLE-${slot+1}`,slot,bot:false,team,x:spawn.x,z:spawn.z,yaw,hits:0,bombCapacity:GAME_BALANCE.CORE_CAPACITY,canKick:false,canThrow:false,pierceCharges:0,jumpY:0,downedUntil:0,eliminated:false,lastInput:0,input:{dx:0,dz:0,seq:0},dashReady:0,nextAction:0,jumpStarted:0,jumpUntil:0,jumpBaseY:0,buildReady:0}
+    const player:PlayerState={id,name:name.slice(0,16)||`RIPPLE-${slot+1}`,slot,bot:false,team,x:spawn.x,z:spawn.z,yaw,hits:0,bombCapacity:GAME_BALANCE.CORE_CAPACITY,canKick:false,canThrow:false,pierceCharges:0,jumpY:0,buildReady:0,falling:false,downedUntil:0,eliminated:false,lastInput:0,input:{dx:0,dz:0,seq:0},dashReady:0,nextAction:0,jumpStarted:0,jumpUntil:0,jumpBaseY:0,fallVelocity:0}
     this.lastHumanJoin=now
     this.players.set(id,player);this.events.push({event:'PLAYER_JOINED',actorId:id});return player
   }
@@ -57,7 +57,7 @@ export class Room{
   }
 
   action(id:string,action:'PLACE'|'DASH'|'KICK'|'THROW'|'RESCUE'|'JUMP'|'BUILD',direction:{x:number;z:number},now=Date.now()){
-    const player=this.players.get(id);if(!player||player.eliminated||player.downedUntil||now<this.playAt())return false
+    const player=this.players.get(id);if(!player||player.eliminated||player.falling||player.downedUntil||now<this.playAt())return false
     const cardinal=Math.abs(direction.x)>=Math.abs(direction.z)?{x:Math.sign(direction.x)||1,z:0}:{x:0,z:Math.sign(direction.z)||1}
     if(action==='PLACE')return this.placeCore(player)
     if(action==='JUMP'){
@@ -89,7 +89,7 @@ export class Room{
       if(!player.canKick)return false
       const x=nearest.core.x+cardinal.x,z=nearest.core.z+cardinal.z
       if(isCellBlocked(this.arena,{x,z})||this.coreAt(x,z,nearest.core.id))return false
-      nearest.core.x=x;nearest.core.z=z;this.events.push({event:'CORE_KICKED',actorId:id,coreId:nearest.core.id});return true
+      nearest.core.x=x;nearest.core.z=z;nearest.core.y=0;this.events.push({event:'CORE_KICKED',actorId:id,coreId:nearest.core.id});return true
     }
     if(!player.canThrow)return false
     let x=nearest.core.x,z=nearest.core.z
@@ -99,7 +99,7 @@ export class Room{
       x=nextX;z=nextZ
     }
     if(x===nearest.core.x&&z===nearest.core.z)return false
-    nearest.core.x=x;nearest.core.z=z;this.events.push({event:'CORE_THROWN',actorId:id,coreId:nearest.core.id});return true
+    nearest.core.x=x;nearest.core.z=z;nearest.core.y=0;this.events.push({event:'CORE_THROWN',actorId:id,coreId:nearest.core.id});return true
   }
 
   rematch(id:string,now=Date.now()){
@@ -108,7 +108,7 @@ export class Room{
     this.cores.clear();this.items.clear();this.winner=null;this.startedAt=now;this.tick=0;this.lastFanPush=0;this.lastVehicleCell=-99;this.lastHumanJoin=now;this.startedEventSent=false;this.resetArena()
     for(const player of this.players.values()){
       const spawn=GIANT_PLAYROOM.spawnPoints[player.slot]
-      player.x=spawn.x;player.z=spawn.z;player.yaw=player.team==='cyan'?Math.PI/2:-Math.PI/2;player.hits=0;player.bombCapacity=GAME_BALANCE.CORE_CAPACITY;player.canKick=false;player.canThrow=false;player.pierceCharges=0;player.jumpY=0;player.jumpStarted=0;player.jumpUntil=0;player.jumpBaseY=0;player.buildReady=0;player.downedUntil=0;player.eliminated=false;player.dashReady=0;player.nextAction=now+800+player.slot*350
+      player.x=spawn.x;player.z=spawn.z;player.yaw=player.team==='cyan'?Math.PI/2:-Math.PI/2;player.hits=0;player.bombCapacity=GAME_BALANCE.CORE_CAPACITY;player.canKick=false;player.canThrow=false;player.pierceCharges=0;player.jumpY=0;player.jumpStarted=0;player.jumpUntil=0;player.jumpBaseY=0;player.buildReady=0;player.falling=false;player.fallVelocity=0;player.downedUntil=0;player.eliminated=false;player.dashReady=0;player.nextAction=now+800+player.slot*350
       player.input={dx:0,dz:0,seq:player.input.seq};player.lastInput=player.input.seq
     }
     this.events.length=0;this.events.push({event:'MATCH_RESTARTED',actorId:id});return true
@@ -124,7 +124,7 @@ export class Room{
     const elapsed=(now-this.playAt())/1000,fan=fanStateAt(elapsed)
     const danger=[...this.cores.values()].filter(core=>core.fuse<1.1).flatMap(core=>traceExplosion(this.arena,core,GAME_BALANCE.CORE_RANGE))
     for(const brain of this.players.values()){
-      if(!brain.bot||brain.eliminated||brain.downedUntil)continue
+      if(!brain.bot||brain.eliminated||brain.falling||brain.downedUntil)continue
       const ally=[...this.players.values()].filter(player=>player.team===brain.team&&player.id!==brain.id&&player.downedUntil&&!player.eliminated).sort((a,b)=>Math.hypot(a.x-brain.x,a.z-brain.z)-Math.hypot(b.x-brain.x,b.z-brain.z))[0]
       const enemy=[...this.players.values()].filter(player=>player.team!==brain.team&&!player.eliminated).sort((a,b)=>Math.hypot(a.x-brain.x,a.z-brain.z)-Math.hypot(b.x-brain.x,b.z-brain.z))[0]
       const target=ally??enemy;if(!target)continue
@@ -143,6 +143,11 @@ export class Room{
     }
     for(const player of this.players.values()){
       if(player.eliminated)continue
+      if(player.falling){
+        player.fallVelocity+=GAME_BALANCE.FALL_GRAVITY*dt;player.jumpY-=player.fallVelocity*dt
+        if(player.jumpY<=GAME_BALANCE.FALL_DEATH_Y){player.eliminated=true;player.falling=false;player.downedUntil=0;this.events.push({event:'PLAYER_FELL',actorId:player.id,x:player.x,y:player.jumpY,z:player.z})}
+        continue
+      }
       player.jumpY=now<player.jumpUntil?player.jumpBaseY+Math.sin(Math.max(0,Math.min(1,(now-player.jumpStarted)/GAME_BALANCE.JUMP_DURATION_MS))*Math.PI)*GAME_BALANCE.JUMP_HEIGHT:this.supportHeightAt(player.x,player.z)
       if(player.downedUntil&&now>=player.downedUntil){player.eliminated=true;player.downedUntil=0;this.events.push({event:'PLAYER_ELIMINATED',actorId:player.id});continue}
       if(player.downedUntil)continue
@@ -152,12 +157,12 @@ export class Room{
       if(this.canOccupy(player,player.x,nz))player.z=Math.max(-GIANT_PLAYROOM.halfZ-.28,Math.min(GIANT_PLAYROOM.halfZ+.28,nz))
       if(fan==='ACTIVE'){const windX=player.x-1.05*dt;if(this.canOccupy(player,windX,player.z))player.x=Math.max(-GIANT_PLAYROOM.halfX-.28,windX)}
       const key=cellKey(worldToGrid(player))
-      if(this.holes.has(key)&&player.jumpY<.12){player.eliminated=true;player.downedUntil=0;this.events.push({event:'PLAYER_FELL',actorId:player.id,x:player.x,z:player.z});continue}
+      if(this.holes.has(key)&&player.jumpY<.12){player.falling=true;player.fallVelocity=0;player.jumpUntil=0;player.input={dx:0,dz:0,seq:player.input.seq};this.events.push({event:'PLAYER_FALLING',actorId:player.id,x:player.x,y:player.jumpY,z:player.z});continue}
       for(const item of this.items.values())if(Math.hypot(item.x-player.x,item.z-player.z)<=GAME_BALANCE.ITEM_PICKUP_RADIUS){this.collectItem(player,item);break}
     }
     if(fan==='ACTIVE'&&now-this.lastFanPush>650){
       this.lastFanPush=now
-      for(const core of [...this.cores.values()].sort((a,b)=>a.x-b.x)){const x=core.x-1;if(!isCellBlocked(this.arena,{x,z:core.z})&&!this.coreAt(x,core.z,core.id))core.x=x}
+      for(const core of [...this.cores.values()].sort((a,b)=>a.x-b.x)){const x=core.x-1;if(!isCellBlocked(this.arena,{x,z:core.z})&&!this.coreAt(x,core.z,core.id)){core.x=x;core.y=0}}
     }
     const vehicle=vehicleStateAt(elapsed)
     if(vehicle.active){
@@ -165,9 +170,9 @@ export class Room{
       if(vehicleCell!==this.lastVehicleCell){
         this.lastVehicleCell=vehicleCell
         for(const core of [...this.cores.values()].filter(core=>Math.abs(core.x-vehicle.x)<.8&&Math.abs(core.z-vehicle.z)<.7)){
-          const x=core.x+1;if(!isCellBlocked(this.arena,{x,z:core.z})&&!this.coreAt(x,core.z,core.id)){core.x=x;this.events.push({event:'VEHICLE_CORE_PUSH',coreId:core.id,x:core.x,z:core.z})}
+          const x=core.x+1;if(!isCellBlocked(this.arena,{x,z:core.z})&&!this.coreAt(x,core.z,core.id)){core.x=x;core.y=0;this.events.push({event:'VEHICLE_CORE_PUSH',coreId:core.id,x:core.x,y:core.y,z:core.z})}
         }
-        for(const player of this.players.values())if(!player.eliminated&&Math.abs(player.x-vehicle.x)<.78&&Math.abs(player.z-vehicle.z)<.72){this.knockback(player,vehicle.x-1,vehicle.z);this.events.push({event:'VEHICLE_PLAYER_PUSH',targetId:player.id,x:player.x,z:player.z})}
+        for(const player of this.players.values())if(!player.eliminated&&!player.falling&&Math.abs(player.x-vehicle.x)<.78&&Math.abs(player.z-vehicle.z)<.72){this.knockback(player,vehicle.x-1,vehicle.z);this.events.push({event:'VEHICLE_PLAYER_PUSH',targetId:player.id,x:player.x,z:player.z})}
       }
     }else this.lastVehicleCell=-99
     for(const core of this.cores.values())core.fuse-=dt
@@ -181,7 +186,7 @@ export class Room{
 
   snapshot(now=Date.now()):RoomSnapshot{
     const countdown=Math.max(0,Math.ceil((this.playAt()-now)/1000)),elapsed=Math.max(0,(now-this.playAt())/1000)
-    return {roomId:this.id,tick:this.tick,serverTime:now,phase:this.winner?'ENDED':countdown?'COUNTDOWN':'PLAYING',countdown,remaining:Math.max(0,GAME_BALANCE.MATCH_SECONDS-elapsed),fan:fanStateAt(elapsed),vehicle:vehicleStateAt(elapsed),ended:!!this.winner,winner:this.winner,players:[...this.players.values()].map(({input,dashReady,nextAction,jumpStarted,jumpUntil,jumpBaseY,buildReady,...player})=>player),cores:[...this.cores.values()].map(core=>({...core})),items:[...this.items.values()],holes:[...this.holes],walls:[...this.arena.walls],destroyedWalls:[...this.destroyedWalls]}
+    return {roomId:this.id,tick:this.tick,serverTime:now,phase:this.winner?'ENDED':countdown?'COUNTDOWN':'PLAYING',countdown,remaining:Math.max(0,GAME_BALANCE.MATCH_SECONDS-elapsed),fan:fanStateAt(elapsed),vehicle:vehicleStateAt(elapsed),ended:!!this.winner,winner:this.winner,players:[...this.players.values()].map(({input,dashReady,nextAction,jumpStarted,jumpUntil,jumpBaseY,fallVelocity,...player})=>player),cores:[...this.cores.values()].map(core=>({...core})),items:[...this.items.values()],holes:[...this.holes],walls:[...this.arena.walls],destroyedWalls:[...this.destroyedWalls]}
   }
 
   private playAt(){return this.startedAt+GAME_BALANCE.COUNTDOWN_SECONDS*1000}
@@ -189,7 +194,7 @@ export class Room{
     const cell=worldToGrid({x,z})
     if(Math.abs(cell.x)>this.arena.halfX||Math.abs(cell.z)>this.arena.halfZ)return false
     if(this.arena.walls.has(cellKey(cell))&&player.jumpY<GAME_BALANCE.OBSTACLE_TOP_Y-.12)return false
-    return ![...this.players.values()].some(other=>other.id!==player.id&&!other.eliminated&&Math.hypot(other.x-x,other.z-z)<GAME_BALANCE.PLAYER_RADIUS*2)
+    return ![...this.players.values()].some(other=>other.id!==player.id&&!other.eliminated&&!other.falling&&Math.hypot(other.x-x,other.z-z)<GAME_BALANCE.PLAYER_RADIUS*2)
   }
   private supportHeightAt(x:number,z:number){return this.arena.walls.has(cellKey(worldToGrid({x,z})))?GAME_BALANCE.OBSTACLE_TOP_Y:0}
   private knockback(player:PlayerState,originX:number,originZ:number){
@@ -213,27 +218,28 @@ export class Room{
     for(let slot=0;slot<4;slot++){
       if([...this.players.values()].some(player=>player.slot===slot))continue
       const spawn=GIANT_PLAYROOM.spawnPoints[slot],team:Team=slot<2?'cyan':'coral',id=`bot-${++this.botId}`,yaw=team==='cyan'?Math.PI/2:-Math.PI/2
-      this.players.set(id,{id,name:names[slot],slot,bot:true,team,x:spawn.x,z:spawn.z,yaw,hits:0,bombCapacity:GAME_BALANCE.CORE_CAPACITY,canKick:false,canThrow:false,pierceCharges:0,jumpY:0,downedUntil:0,eliminated:false,lastInput:0,input:{dx:0,dz:0,seq:0},dashReady:0,nextAction:now+800+slot*350,jumpStarted:0,jumpUntil:0,jumpBaseY:0,buildReady:0})
+      this.players.set(id,{id,name:names[slot],slot,bot:true,team,x:spawn.x,z:spawn.z,yaw,hits:0,bombCapacity:GAME_BALANCE.CORE_CAPACITY,canKick:false,canThrow:false,pierceCharges:0,jumpY:0,buildReady:0,falling:false,downedUntil:0,eliminated:false,lastInput:0,input:{dx:0,dz:0,seq:0},dashReady:0,nextAction:now+800+slot*350,jumpStarted:0,jumpUntil:0,jumpBaseY:0,fallVelocity:0})
       this.events.push({event:'BOT_FILLED',actorId:id})
     }
   }
 
   private placeCore(player:PlayerState){
-    const cell=worldToGrid(player),active=[...this.cores.values()].filter(core=>core.owner===player.id).length
-    if(active>=player.bombCapacity||isCellBlocked(this.arena,cell)||this.holes.has(cellKey(cell))||this.coreAt(cell.x,cell.z))return false
+    const cell=worldToGrid(player),key=cellKey(cell),active=[...this.cores.values()].filter(core=>core.owner===player.id).length
+    const onObstacle=this.arena.walls.has(key)&&Math.abs(player.jumpY-GAME_BALANCE.OBSTACLE_TOP_Y)<.18
+    if(active>=player.bombCapacity||(isCellBlocked(this.arena,cell)&&!onObstacle)||this.holes.has(key)||this.coreAt(cell.x,cell.z))return false
     const piercing=player.pierceCharges>0;if(piercing)player.pierceCharges--
-    const id=`${this.id}-${++this.coreId}`;this.cores.set(id,{id,owner:player.id,team:player.team,x:cell.x,z:cell.z,fuse:GAME_BALANCE.CORE_FUSE_SECONDS,piercing,chain:1});this.events.push({event:'CORE_PLACED',actorId:player.id,coreId:id});return true
+    const y=onObstacle?GAME_BALANCE.OBSTACLE_TOP_Y:0,id=`${this.id}-${++this.coreId}`;this.cores.set(id,{id,owner:player.id,team:player.team,x:cell.x,z:cell.z,y,fuse:GAME_BALANCE.CORE_FUSE_SECONDS,piercing,chain:1});this.events.push({event:'CORE_PLACED',actorId:player.id,coreId:id,x:cell.x,y,z:cell.z});return true
   }
 
   private explode(core:CoreState,now:number){
     if(!this.cores.has(core.id))return
     const cells=core.piercing?tracePiercingExplosion(this.arena,core,GAME_BALANCE.CORE_RANGE):traceExplosion(this.arena,core,GAME_BALANCE.CORE_RANGE),keys=new Set(cells.map(cellKey))
     const wallHits=core.piercing?cells.filter(cell=>this.arena.walls.has(cellKey(cell))):blastHitWalls(this.arena,core,GAME_BALANCE.CORE_RANGE)
-    this.cores.delete(core.id);this.events.push({event:'CORE_EXPLODED',actorId:core.owner,coreId:core.id,x:core.x,z:core.z,team:core.team,chain:core.chain,piercing:core.piercing})
+    this.cores.delete(core.id);this.events.push({event:'CORE_EXPLODED',actorId:core.owner,coreId:core.id,x:core.x,y:core.y,z:core.z,team:core.team,chain:core.chain,piercing:core.piercing})
     for(const wall of wallHits){const key=cellKey(wall);this.arena.walls.delete(key);this.destroyedWalls.add(key);this.events.push({event:'OBJECT_DESTROYED',x:wall.x,z:wall.z,team:core.team});if(!core.piercing)this.spawnItem(wall.x,wall.z)}
     if(core.piercing)for(const floorCell of piercingFloorCells(core,cells,GIANT_PLAYROOM.spawnPoints)){const key=cellKey(floorCell);this.arena.walls.delete(key);this.holes.add(key);this.events.push({event:'FLOOR_DESTROYED',x:floorCell.x,z:floorCell.z,team:core.team})}
     for(const player of this.players.values()){
-      if(player.eliminated||player.downedUntil||!cells.some(cell=>Math.abs(cell.x-player.x)<.62&&Math.abs(cell.z-player.z)<.62))continue
+      if(player.eliminated||player.falling||player.downedUntil||!cells.some(cell=>Math.abs(cell.x-player.x)<.62&&Math.abs(cell.z-player.z)<.62))continue
       this.knockback(player,core.x,core.z);player.hits++;if(player.hits>=3)player.downedUntil=now+GAME_BALANCE.FLUX_DOWNED_MS;this.events.push({event:player.hits>=3?'PLAYER_FLUX_LOCKED':'PLAYER_HIT',actorId:core.owner,targetId:player.id})
     }
     let chained=0

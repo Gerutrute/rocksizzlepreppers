@@ -142,6 +142,15 @@ describe('authoritative room',()=>{
     expect(player.x).toBeGreaterThan(-10.5)
     room.input(player.id,2,0,0);room.step(.1,3900)
     expect(player.jumpY).toBe(GAME_BALANCE.OBSTACLE_TOP_Y)
+    expect(room.action(player.id,'PLACE',{x:1,z:0},3900)).toBe(true)
+    expect([...room.cores.values()][0].y).toBe(GAME_BALANCE.OBSTACLE_TOP_Y)
+  })
+
+  it('enforces the obstacle build cooldown',()=>{
+    const room=new Room('BUILD-COOLDOWN',0),player=room.join('p1','Bloo',0)
+    expect(room.action(player.id,'BUILD',{x:1,z:0},3000)).toBe(true)
+    expect(room.action(player.id,'BUILD',{x:0,z:1},4799)).toBe(false)
+    expect(room.action(player.id,'BUILD',{x:0,z:1},4800)).toBe(true)
   })
 
   it('consumes a piercing charge, crosses walls and creates lethal floor holes',()=>{
@@ -153,6 +162,16 @@ describe('authoritative room',()=>{
     room.step(3,6000)
     expect(room.arena.walls.has('7,2')).toBe(false)
     expect(room.holes.has('8,2')).toBe(true)
+    player.x=8;player.z=2;room.step(.1,6100)
+    expect(player.falling).toBe(true)
+    expect(player.eliminated).toBe(false)
+    expect(room.events.some(event=>event.event==='PLAYER_FALLING')).toBe(true)
+    room.step(.2,6300)
+    expect(player.jumpY).toBeLessThan(0)
+    expect(player.eliminated).toBe(false)
+    room.step(.5,6800)
+    expect(player.eliminated).toBe(true)
+    expect(room.events.some(event=>event.event==='PLAYER_FELL')).toBe(true)
   })
 
   it('spawns a deterministic item from a destroyed obstacle and applies it on pickup',()=>{

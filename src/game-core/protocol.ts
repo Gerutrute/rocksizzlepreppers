@@ -16,6 +16,8 @@ export type NetworkPlayer = {
   canThrow:boolean
   pierceCharges:number
   jumpY:number
+  buildReady:number
+  falling:boolean
   downedUntil:number
   eliminated:boolean
   lastInput:number
@@ -27,6 +29,7 @@ export type NetworkCore = {
   team:Team
   x:number
   z:number
+  y:number
   fuse:number
   piercing:boolean
 }
@@ -61,5 +64,5 @@ export type ClientMessage =
 export type ServerMessage =
   | {type:'WELCOME';playerId:string;slot:number;roomId:string}
   | {type:'SNAPSHOT';snapshot:RoomSnapshot}
-  | {type:'GAME_EVENT';event:string;actorId?:string;targetId?:string;coreId?:string;itemId?:string;kind?:ItemKind;x?:number;z?:number;team?:Team;chain?:number;piercing?:boolean}
+  | {type:'GAME_EVENT';event:string;actorId?:string;targetId?:string;coreId?:string;itemId?:string;kind?:ItemKind;x?:number;y?:number;z?:number;team?:Team;chain?:number;piercing?:boolean}
   | {type:'ERROR';message:string}
