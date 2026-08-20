@@ -1,6 +1,7 @@
 import * as THREE from 'three'
+import type { RippleVariant as SharedRippleVariant } from '../game-core/protocol'
 
-export type RippleVariant='bloo'|'lumi'|'coral'|'vio'
+export type RippleVariant=SharedRippleVariant
 
 const PALETTES:Record<RippleVariant,{body:string;accent:string;limb:string;glow:string}>={
   bloo:{body:'#1558e8',accent:'#2ee8ea',limb:'#2ee8ea',glow:'#75f7ff'},

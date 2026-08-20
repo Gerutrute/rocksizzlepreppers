@@ -30,7 +30,7 @@ wss.on('connection',socket=>{
     try{message=JSON.parse(raw.toString()) as ClientMessage}catch{send(socket,{type:'ERROR',message:'INVALID_MESSAGE'});return}
     if(message.type==='JOIN'){
       const id=roomId(message.roomId),room=rooms.get(id)??new Room(id);rooms.set(id,room)
-      try{const player=room.join(meta.id,message.name);meta.room=room;send(socket,{type:'WELCOME',playerId:player.id,slot:player.slot,roomId:id})}catch{send(socket,{type:'ERROR',message:'ROOM_FULL'})}
+      try{const player=room.join(meta.id,message.name,Date.now(),message.variant);meta.room=room;send(socket,{type:'WELCOME',playerId:player.id,slot:player.slot,roomId:id})}catch{send(socket,{type:'ERROR',message:'ROOM_FULL'})}
       return
     }
     if(!meta.room){send(socket,{type:'ERROR',message:'JOIN_REQUIRED'});return}

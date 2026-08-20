@@ -1,6 +1,6 @@
-import type { ClientMessage, ServerMessage } from '../game-core/protocol'
+import type { ClientMessage, RippleVariant, ServerMessage } from '../game-core/protocol'
 
-export type NetworkSession={roomId:string;name:string}
+export type NetworkSession={roomId:string;name:string;variant:RippleVariant}
 
 export class NetworkClient{
   private socket?:WebSocket
@@ -21,7 +21,7 @@ export class NetworkClient{
       const protocol=location.protocol==='https:'?'wss':'ws'
       const configuredUrl=import.meta.env.VITE_WS_URL?.trim()
       const socket=new WebSocket(configuredUrl||`${protocol}://${location.hostname}:5175`);this.socket=socket
-      socket.addEventListener('open',()=>{if(this.closed)return;this.send({type:'JOIN',roomId:this.session!.roomId,name:this.session!.name});resolve()},{once:true})
+      socket.addEventListener('open',()=>{if(this.closed)return;this.send({type:'JOIN',roomId:this.session!.roomId,name:this.session!.name,variant:this.session!.variant});resolve()},{once:true})
       socket.addEventListener('error',()=>{if(initial)reject(new Error('NETWORK_UNAVAILABLE'))},{once:true})
       socket.addEventListener('message',event=>{try{const message=JSON.parse(String(event.data)) as ServerMessage;this.listeners.forEach(listener=>listener(message))}catch{/* Ignore malformed server frames. */}})
       socket.addEventListener('close',()=>{

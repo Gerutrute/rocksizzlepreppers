@@ -1,5 +1,6 @@
 export type Team = 'cyan'|'coral'
 export type ItemKind = 'KICK'|'THROW'|'CAPACITY'|'PIERCE'
+export type RippleVariant = 'bloo'|'lumi'|'coral'|'vio'
 
 export type NetworkPlayer = {
   id:string
@@ -7,6 +8,7 @@ export type NetworkPlayer = {
   slot:number
   bot:boolean
   team:Team
+  variant:RippleVariant
   x:number
   z:number
   yaw:number
@@ -14,6 +16,8 @@ export type NetworkPlayer = {
   bombCapacity:number
   canKick:boolean
   canThrow:boolean
+  kickLevel:number
+  throwLevel:number
   pierceCharges:number
   jumpY:number
   jumpReady:number
@@ -57,7 +61,7 @@ export type RoomSnapshot = {
 }
 
 export type ClientMessage =
-  | {type:'JOIN';roomId:string;name:string}
+  | {type:'JOIN';roomId:string;name:string;variant:RippleVariant}
   | {type:'INPUT';seq:number;dx:number;dz:number}
   | {type:'ACTION';seq:number;action:'PLACE'|'DASH'|'KICK'|'THROW'|'RESCUE'|'JUMP'|'BUILD';direction:{x:number;z:number}}
   | {type:'REMATCH'}

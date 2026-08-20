@@ -9,6 +9,12 @@ describe('authoritative room',()=>{
     expect(()=>room.join('p4','Overflow')).toThrow('ROOM_FULL')
   })
 
+  it('preserves a selected character variant in authoritative snapshots',()=>{
+    const room=new Room('VARIANT',0),player=room.join('p1','Vio Player',0,'vio')
+    expect(player.variant).toBe('vio')
+    expect(room.snapshot(0).players[0].variant).toBe('vio')
+  })
+
   it('applies sequenced input on a fixed server step',()=>{
     const room=new Room('MOVE',0),player=room.join('p1','Bloo',0)
     room.input(player.id,2,1,0);room.input(player.id,1,-1,0);room.step(1/30,3100)
@@ -25,6 +31,17 @@ describe('authoritative room',()=>{
     expect(player.yaw).toBeCloseTo(Math.PI)
     expect([...room.cores.values()][0]).toMatchObject({x:-10,z:3})
     room.step(3,6000);expect(room.cores.size).toBe(0)
+  })
+
+  it('increases kick and throw distance with repeated item levels',()=>{
+    const room=new Room('STACK-RANGE',0),player=room.join('p1','Bloo',0)
+    player.canKick=true;player.kickLevel=3;player.canThrow=true;player.throwLevel=2
+    expect(room.action(player.id,'PLACE',{x:1,z:0},3000)).toBe(true)
+    expect(room.action(player.id,'KICK',{x:1,z:0},3000)).toBe(true)
+    expect([...room.cores.values()][0]).toMatchObject({x:-8,z:6})
+    player.x=-8;player.z=6
+    expect(room.action(player.id,'THROW',{x:0,z:-1},3000)).toBe(true)
+    expect([...room.cores.values()][0]).toMatchObject({x:-8,z:1})
   })
 
   it('emits authoritative chain depth for connected Core explosions',()=>{

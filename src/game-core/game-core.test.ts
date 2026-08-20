@@ -3,7 +3,7 @@ import { GIANT_PLAYROOM } from './arena'
 import { blastHitWalls } from './destruction'
 import { getDangerCells, gridToWorld, isCellBlocked, traceExplosion, worldToGrid } from './grid'
 import { canPlaceCore, fluxPhase, matchWinner, resolveChain } from './rules'
-import { itemForRoll, piercingFloorCells, tracePiercingExplosion } from './powerups'
+import { itemForRoll, kickDistanceForLevel, piercingFloorCells, stackItemEffect, throwDistanceForLevel, tracePiercingExplosion } from './powerups'
 import { fanStateAt, vehicleStateAt } from './timeline'
 
 describe('logical grid',()=>{
@@ -62,6 +62,17 @@ describe('items and piercing blasts',()=>{
     expect(itemForRoll(.4)).toBe('CAPACITY')
     expect(itemForRoll(.6)).toBe('PIERCE')
     expect(itemForRoll(.9)).toBeNull()
+  })
+
+  it('stacks repeated item pickups up to their gameplay caps',()=>{
+    let stats={bombCapacity:1,canKick:false,canThrow:false,kickLevel:0,throwLevel:0,pierceCharges:0}
+    for(let pickup=0;pickup<9;pickup++)stats=stackItemEffect(stats,'KICK')
+    for(let pickup=0;pickup<3;pickup++)stats=stackItemEffect(stats,'THROW')
+    for(let pickup=0;pickup<9;pickup++)stats=stackItemEffect(stats,'CAPACITY')
+    for(let pickup=0;pickup<9;pickup++)stats=stackItemEffect(stats,'PIERCE')
+    expect(stats).toMatchObject({canKick:true,canThrow:true,kickLevel:5,throwLevel:3,bombCapacity:6,pierceCharges:6})
+    expect(kickDistanceForLevel(stats.kickLevel)).toBe(5)
+    expect(throwDistanceForLevel(stats.throwLevel)).toBe(7)
   })
 
   it('lets a piercing blast continue through walls',()=>{

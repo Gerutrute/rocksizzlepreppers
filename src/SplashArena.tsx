@@ -6,7 +6,7 @@ import { GIANT_PLAYROOM } from './game-core/arena'
 import { GAME_BALANCE } from './game-core/config'
 import { blastHitWalls } from './game-core/destruction'
 import { isCellBlocked, traceExplosion, worldToGrid } from './game-core/grid'
-import { itemForRoll, piercingFloorCells, tracePiercingExplosion, type ItemKind } from './game-core/powerups'
+import { itemForRoll, kickDistanceForLevel, piercingFloorCells, stackItemEffect, throwDistanceForLevel, tracePiercingExplosion, type ItemKind } from './game-core/powerups'
 import { canPlaceCore, matchWinner } from './game-core/rules'
 import { fanStateAt, vehicleStateAt } from './game-core/timeline'
 import type { RoomSnapshot, ServerMessage } from './game-core/protocol'
@@ -20,6 +20,7 @@ const BLUE = '/assets/splash/ripple-blue-keyart-v2-web.png'
 const RED = '/assets/splash/ripple-red-keyart-v2-web.png'
 const YELLOW = '/assets/splash/ripple-yellow-keyart-v2-web.png'
 const VIO = '/assets/splash/ripple-vio-keyart-v1-web.webp'
+const VARIANT_INFO:Record<RippleVariant,{name:string;image:string}>={bloo:{name:'BLOO',image:BLUE},lumi:{name:'LUMI',image:YELLOW},coral:{name:'CORAL',image:RED},vio:{name:'VIO',image:VIO}}
 const GAME_MUSIC = [
   '/assets/audio/neon-bounce.mp3',
   '/assets/audio/neon-platform-rush-1.mp3',
@@ -30,20 +31,20 @@ const ARENA_X = HALF_X*2+1, ARENA_Z = HALF_Z*2+1
 const WALLS = GIANT_PLAYROOM.walls
 
 type Team = 'cyan'|'coral'
-type Actor = { id:string; name:string; team:Team; isPlayer:boolean; networkId?:string; model:THREE.Group; rig:RippleRig; materials:THREE.MeshStandardMaterial[]; shadow:THREE.Mesh; rescueRing:THREE.Mesh; baseScale:number; x:number; z:number; serverX:number; serverZ:number; renderX:number; renderZ:number; targetX:number; targetZ:number; lastRenderX:number; lastRenderZ:number; walkPhase:number; walkBlend:number; wasAirborne:boolean; landingBlend:number; gesture:RippleGestureKind|null; gestureStarted:number; yaw:number; targetYaw:number; hits:number; bombCapacity:number; canKick:boolean; canThrow:boolean; pierceCharges:number; jumpY:number; jumpReady:number; jumpStarted:number; jumpUntil:number; jumpBaseY:number; buildReady:number; falling:boolean; fallVelocity:number; lockedUntil:number; downedUntil:number; eliminated:boolean; dashReady:number }
+type Actor = { id:string; name:string; team:Team; isPlayer:boolean; networkId?:string; model:THREE.Group; rig:RippleRig; materials:THREE.MeshStandardMaterial[]; shadow:THREE.Mesh; rescueRing:THREE.Mesh; baseScale:number; x:number; z:number; serverX:number; serverZ:number; renderX:number; renderZ:number; targetX:number; targetZ:number; lastRenderX:number; lastRenderZ:number; walkPhase:number; walkBlend:number; wasAirborne:boolean; landingBlend:number; gesture:RippleGestureKind|null; gestureStarted:number; yaw:number; targetYaw:number; hits:number; bombCapacity:number; canKick:boolean; canThrow:boolean; kickLevel:number; throwLevel:number; pierceCharges:number; jumpY:number; jumpReady:number; jumpStarted:number; jumpUntil:number; jumpBaseY:number; buildReady:number; falling:boolean; fallVelocity:number; lockedUntil:number; downedUntil:number; eliminated:boolean; dashReady:number }
 type Flight = { fromX:number; fromY:number; fromZ:number; toX:number; toY:number; toZ:number; start:number; duration:number }
 type Core = { id:number; networkId?:string; group:THREE.Group; x:number; y:number; z:number; fuse:number; owner:string; team:Team; piercing:boolean; ring:THREE.Mesh; flight?:Flight }
 type ItemView={id:string;kind:ItemKind;x:number;z:number;group:THREE.Group}
-type Burst = { group:THREE.Group; born:number; material:THREE.MeshStandardMaterial; pulses:THREE.InstancedMesh; ribbons:THREE.InstancedMesh; rings:THREE.InstancedMesh; shards:THREE.InstancedMesh; shock:THREE.Mesh; light:THREE.PointLight; cells:Array<{x:number;z:number}>; active:boolean }
+type Burst = { group:THREE.Group; born:number; material:THREE.MeshBasicMaterial; coreMaterial:THREE.MeshBasicMaterial; pulses:THREE.InstancedMesh; cores:THREE.InstancedMesh; ribbons:THREE.InstancedMesh; rings:THREE.InstancedMesh; shards:THREE.InstancedMesh; shock:THREE.Mesh; light:THREE.PointLight; cells:Array<{x:number;z:number}>; active:boolean }
 type Debris = {mesh:THREE.Mesh;velocity:THREE.Vector3;spin:THREE.Vector3;born:number}
 type ParticleExplosion = {system:ParticleSystem;born:number}
-type UiState = { time:number; countdown:number; localTeam:Team; playerHits:number; health:number; maxHealth:number; jump:number; botHits:number; allyHits:number; rival2Hits:number; alliesAlive:number; rivalsAlive:number; onlineHumans:number; cores:number; capacity:number; canKick:boolean; canThrow:boolean; pierceCharges:number; chain:number; dash:number; build:number; fan:'CALM'|'WARNING'|'ACTIVE'; vehicle:boolean; fps:number;frameMs:number;drawCalls:number;triangles:number;textures:number;simBodies:number;rtt:number;packetRate:number;pendingInputs:number;serverPos:string;clientPos:string;message:string }
+type UiState = { time:number; countdown:number; localTeam:Team; playerHits:number; health:number; maxHealth:number; jump:number; botHits:number; allyHits:number; rival2Hits:number; alliesAlive:number; rivalsAlive:number; onlineHumans:number; cores:number; capacity:number; canKick:boolean; canThrow:boolean; kickLevel:number; throwLevel:number; pierceCharges:number; chain:number; dash:number; build:number; fan:'CALM'|'WARNING'|'ACTIVE'; vehicle:boolean; fps:number;frameMs:number;drawCalls:number;triangles:number;textures:number;simBodies:number;rtt:number;packetRate:number;pendingInputs:number;serverPos:string;clientPos:string;message:string }
 
 const lerpAngle=(from:number,to:number,alpha:number)=>from+Math.atan2(Math.sin(to-from),Math.cos(to-from))*alpha
-const initialUi=():UiState=>({time:GAME_BALANCE.MATCH_SECONDS,countdown:3,localTeam:'cyan',playerHits:0,health:GAME_BALANCE.PLAYER_MAX_HITS,maxHealth:GAME_BALANCE.PLAYER_MAX_HITS,jump:1,botHits:0,allyHits:0,rival2Hits:0,alliesAlive:2,rivalsAlive:2,onlineHumans:0,cores:1,capacity:1,canKick:false,canThrow:false,pierceCharges:0,chain:0,dash:1,build:1,fan:'CALM',vehicle:false,fps:0,frameMs:0,drawCalls:0,triangles:0,textures:0,simBodies:4,rtt:0,packetRate:0,pendingInputs:0,serverPos:'0.00,0.00',clientPos:'0.00,0.00',message:'READY · 시작 신호를 기다리세요'})
+const initialUi=():UiState=>({time:GAME_BALANCE.MATCH_SECONDS,countdown:3,localTeam:'cyan',playerHits:0,health:GAME_BALANCE.PLAYER_MAX_HITS,maxHealth:GAME_BALANCE.PLAYER_MAX_HITS,jump:1,botHits:0,allyHits:0,rival2Hits:0,alliesAlive:2,rivalsAlive:2,onlineHumans:0,cores:1,capacity:1,canKick:false,canThrow:false,kickLevel:0,throwLevel:0,pierceCharges:0,chain:0,dash:1,build:1,fan:'CALM',vehicle:false,fps:0,frameMs:0,drawCalls:0,triangles:0,textures:0,simBodies:4,rtt:0,packetRate:0,pendingInputs:0,serverPos:'0.00,0.00',clientPos:'0.00,0.00',message:'READY · 시작 신호를 기다리세요'})
 
 function Mark(){ return <span className="splash-mark"><i/><i/><b/></span> }
-export default function SplashArena({onExit,networkSession}:{onExit:()=>void;networkSession?:NetworkSession}){
+export default function SplashArena({onExit,networkSession,selectedVariant}:{onExit:()=>void;networkSession?:NetworkSession;selectedVariant:RippleVariant}){
   const hostRef=useRef<HTMLDivElement>(null)
   const networkClientRef=useRef<NetworkClient|null>(null)
   const musicRef=useRef<GameMusicPlaylist|null>(null)
@@ -226,10 +227,10 @@ export default function SplashArena({onExit,networkSession}:{onExit:()=>void;net
       const shadow=new THREE.Mesh(shadowGeo,shadowMat);shadow.rotation.x=-Math.PI/2;shadow.position.set(x,.025,z);scene.add(shadow)
       const rescueRing=new THREE.Mesh(new THREE.TorusGeometry(.56,.055,10,32),new THREE.MeshBasicMaterial({color:team==='cyan'?'#68efff':'#ff7884',transparent:true,opacity:.85,depthWrite:false,toneMapped:false}))
       rescueRing.rotation.x=-Math.PI/2;rescueRing.position.set(x,.12,z);rescueRing.visible=false;scene.add(rescueRing)
-       return{id,name,team,isPlayer,model,rig,materials,shadow,rescueRing,baseScale:model.scale.x,x,z,serverX:x,serverZ:z,renderX:x,renderZ:z,targetX:x,targetZ:z,lastRenderX:x,lastRenderZ:z,walkPhase:0,walkBlend:0,wasAirborne:false,landingBlend:0,gesture:null,gestureStarted:0,yaw,targetYaw:yaw,hits:0,bombCapacity:GAME_BALANCE.CORE_CAPACITY,canKick:false,canThrow:false,pierceCharges:0,jumpY:0,jumpReady:0,jumpStarted:0,jumpUntil:0,jumpBaseY:0,buildReady:0,falling:false,fallVelocity:0,lockedUntil:0,downedUntil:0,eliminated:false,dashReady:0}
+       return{id,name,team,isPlayer,model,rig,materials,shadow,rescueRing,baseScale:model.scale.x,x,z,serverX:x,serverZ:z,renderX:x,renderZ:z,targetX:x,targetZ:z,lastRenderX:x,lastRenderZ:z,walkPhase:0,walkBlend:0,wasAirborne:false,landingBlend:0,gesture:null,gestureStarted:0,yaw,targetYaw:yaw,hits:0,bombCapacity:GAME_BALANCE.CORE_CAPACITY,canKick:false,canThrow:false,kickLevel:0,throwLevel:0,pierceCharges:0,jumpY:0,jumpReady:0,jumpStarted:0,jumpUntil:0,jumpBaseY:0,buildReady:0,falling:false,fallVelocity:0,lockedUntil:0,downedUntil:0,eliminated:false,dashReady:0}
     }
     const [spawnBloo,spawnLumi,spawnCoral,spawnVio]=GIANT_PLAYROOM.spawnPoints
-    const player=createActor('bloo','BLOO','cyan',true,'bloo',spawnBloo.x,spawnBloo.z,1.04)
+    const player=createActor(selectedVariant,selectedVariant.toUpperCase(),'cyan',true,selectedVariant,spawnBloo.x,spawnBloo.z,1.04)
     const ally=createActor('lumi','LUMI','cyan',false,'lumi',spawnLumi.x,spawnLumi.z,.98)
     const bot=createActor('coral','CORAL','coral',false,'coral',spawnCoral.x,spawnCoral.z,.98)
     const vio=createActor('vio','VIO','coral',false,'vio',spawnVio.x,spawnVio.z,.98)
@@ -252,13 +253,13 @@ export default function SplashArena({onExit,networkSession}:{onExit:()=>void;net
       cyan:new THREE.MeshStandardMaterial({color:'#50ecff',emissive:'#20cce9',emissiveIntensity:3,roughness:.2,metalness:.16}),
       coral:new THREE.MeshStandardMaterial({color:'#ff796a',emissive:'#f03c4e',emissiveIntensity:2.8,roughness:.2,metalness:.16}),
     }
-    const burstPulseGeometry=new THREE.SphereGeometry(.3,18,12),burstRibbonGeometry=new THREE.CapsuleGeometry(.12,.72,5,10),burstRingGeometry=new THREE.TorusGeometry(.34,.045,8,22),burstShockGeometry=new THREE.SphereGeometry(.72,22,16),burstShardGeometry=new THREE.TetrahedronGeometry(.13,0)
+    const burstPulseGeometry=new THREE.SphereGeometry(.32,18,12),burstCoreGeometry=new THREE.IcosahedronGeometry(.1,2),burstRibbonGeometry=new THREE.BoxGeometry(.17,.09,1.04),burstRingGeometry=new THREE.TorusGeometry(.34,.045,8,22),burstShockGeometry=new THREE.SphereGeometry(.72,22,16),burstShardGeometry=new THREE.TetrahedronGeometry(.13,0)
     const bursts:Burst[]=Array.from({length:20},()=>{
-      const group=new THREE.Group(),material=new THREE.MeshStandardMaterial({color:'#0aa9d6',emissive:'#087ba8',emissiveIntensity:.8,roughness:.22,metalness:.06,transparent:true,opacity:0,depthWrite:false})
-      const shockMaterial=new THREE.MeshBasicMaterial({color:'#16c9ee',transparent:true,opacity:0,wireframe:true,blending:THREE.AdditiveBlending,depthWrite:false,toneMapped:false})
-      const pulses=new THREE.InstancedMesh(burstPulseGeometry,material,13),ribbons=new THREE.InstancedMesh(burstRibbonGeometry,material,12),rings=new THREE.InstancedMesh(burstRingGeometry,material,13),shards=new THREE.InstancedMesh(burstShardGeometry,material,36),shock=new THREE.Mesh(burstShockGeometry,shockMaterial),light=new THREE.PointLight('#16c9ee',0,7)
-      pulses.count=0;ribbons.count=0;rings.count=0;shards.count=36;pulses.frustumCulled=false;ribbons.frustumCulled=false;rings.frustumCulled=false;shards.frustumCulled=false;shock.position.y=.42;light.position.y=.55;group.add(pulses,ribbons,rings,shards,shock,light);group.visible=false;scene.add(group)
-      return{group,born:0,material,pulses,ribbons,rings,shards,shock,light,cells:[],active:false}
+      const group=new THREE.Group(),material=new THREE.MeshBasicMaterial({color:'#16c9ee',transparent:true,opacity:0,depthWrite:false,toneMapped:false}),coreMaterial=new THREE.MeshBasicMaterial({color:'#ffffff',transparent:true,opacity:0,blending:THREE.AdditiveBlending,depthWrite:false,toneMapped:false})
+      const shockMaterial=new THREE.MeshBasicMaterial({color:'#28e6ff',transparent:true,opacity:0,blending:THREE.AdditiveBlending,depthWrite:false,side:THREE.DoubleSide,toneMapped:false})
+      const pulses=new THREE.InstancedMesh(burstPulseGeometry,material,13),cores=new THREE.InstancedMesh(burstCoreGeometry,coreMaterial,13),ribbons=new THREE.InstancedMesh(burstRibbonGeometry,material,12),rings=new THREE.InstancedMesh(burstRingGeometry,material,13),shards=new THREE.InstancedMesh(burstShardGeometry,coreMaterial,36),shock=new THREE.Mesh(burstShockGeometry,shockMaterial),light=new THREE.PointLight('#28e6ff',0,8)
+      pulses.count=0;cores.count=0;ribbons.count=0;rings.count=0;shards.count=36;[pulses,cores,ribbons,rings,shards].forEach(mesh=>{mesh.frustumCulled=false;mesh.renderOrder=6});shock.position.y=.42;shock.renderOrder=5;light.position.y=.55;group.add(ribbons,pulses,cores,rings,shards,shock,light);group.visible=false;scene.add(group)
+      return{group,born:0,material,coreMaterial,pulses,cores,ribbons,rings,shards,shock,light,cells:[],active:false}
     })
     const particleExplosions:ParticleExplosion[]=[]
     const spawnParticleExplosion=(x:number,z:number,team:Team,now:number)=>{
@@ -313,6 +314,15 @@ export default function SplashArena({onExit,networkSession}:{onExit:()=>void;net
       say(`카메라 추적 대상: ${next.name}`)
     }
     const setActorDownedVisual=(actor:Actor,downed:boolean)=>{actor.materials.forEach(material=>{material.opacity=downed ? .46 : 1;material.depthWrite=!downed});actor.model.scale.setScalar(actor.baseScale*(downed ? .72 : 1))}
+    const setActorVariant=(actor:Actor,variant:RippleVariant)=>{
+      if(actor.rig.variant===variant)return
+      const previous=actor.model,{group:model,materials,rig}=createRippleModel(variant)
+      model.position.copy(previous.position);model.rotation.copy(previous.rotation);model.scale.setScalar(actor.baseScale);model.visible=previous.visible;scene.add(model);scene.remove(previous)
+      const geometries=new Set<THREE.BufferGeometry>(),oldMaterials=new Set<THREE.Material>()
+      previous.traverse(object=>{if(object instanceof THREE.Mesh){geometries.add(object.geometry);const material=object.material;if(Array.isArray(material))material.forEach(item=>oldMaterials.add(item));else oldMaterials.add(material)}})
+      geometries.forEach(geometry=>geometry.dispose());oldMaterials.forEach(material=>material.dispose())
+      actor.model=model;actor.materials=materials;actor.rig=rig;setActorDownedVisual(actor,!!actor.downedUntil)
+    }
 
     const addCoreView=(owner:string,team:Team,gx:number,gz:number,fuse:number,networkId?:string,piercing=false,y=0)=>{
       const group=new THREE.Group()
@@ -395,24 +405,23 @@ export default function SplashArena({onExit,networkSession}:{onExit:()=>void;net
       if(!ended&&(!cyanAlive||!coralAlive)){ended=true;setResult(cyanAlive?'win':'lose')}
     }
     const spawnExplosion=(x:number,z:number,team:Team,now:number,chain:number,piercing=false,y=0)=>{
-      const cells=piercing?tracePiercingExplosion(arenaState,{x,z},GAME_BALANCE.CORE_RANGE):traceExplosion(arenaState,{x,z},GAME_BALANCE.CORE_RANGE),burst=bursts.find(item=>!item.active)??bursts.reduce((oldest,item)=>item.born<oldest.born?item:oldest),color=piercing?'#fff36c':team==='cyan'?'#0aa9d6':'#d92f4d'
-      burst.active=true;burst.born=now;burst.group.visible=true;burst.group.position.set(x,y,z);burst.group.scale.setScalar(1);burst.material.color.set(color);burst.material.emissive.set(color);burst.material.opacity=.88
-      ;(burst.shock.material as THREE.MeshBasicMaterial).color.set(color);(burst.shock.material as THREE.MeshBasicMaterial).opacity=.38;burst.shock.scale.setScalar(.3);burst.light.color.set(color);burst.light.intensity=20
-      burst.cells=cells.map(cell=>({x:cell.x-x,z:cell.z-z}));burst.pulses.count=cells.length;burst.ribbons.count=Math.max(0,cells.length-1);burst.rings.count=cells.length
+      const cells=piercing?tracePiercingExplosion(arenaState,{x,z},GAME_BALANCE.CORE_RANGE):traceExplosion(arenaState,{x,z},GAME_BALANCE.CORE_RANGE),burst=bursts.find(item=>!item.active)??bursts.reduce((oldest,item)=>item.born<oldest.born?item:oldest),color=piercing?'#ffe95b':team==='cyan'?'#28e6ff':'#ff5e63'
+      burst.active=true;burst.born=now;burst.group.visible=true;burst.group.position.set(x,y,z);burst.group.scale.setScalar(1);burst.material.color.set(color);burst.material.opacity=.94;burst.coreMaterial.color.set(piercing?'#fff9c4':'#ffffff');burst.coreMaterial.opacity=1
+      ;(burst.shock.material as THREE.MeshBasicMaterial).color.set(color);(burst.shock.material as THREE.MeshBasicMaterial).opacity=.13;burst.shock.scale.setScalar(.24);burst.light.color.set(color);burst.light.intensity=11
+      burst.cells=cells.map(cell=>({x:cell.x-x,z:cell.z-z}));burst.pulses.count=cells.length;burst.cores.count=cells.length;burst.ribbons.count=Math.max(0,cells.length-1);burst.rings.count=cells.length
       cells.forEach((cell,index)=>{
         burstMatrix.position.set(cell.x-x,.42,cell.z-z);burstMatrix.rotation.set(0,0,0);burstMatrix.scale.setScalar(index?1:1.65+chain*.08);burstMatrix.updateMatrix();burst.pulses.setMatrixAt(index,burstMatrix.matrix)
-        if(index){const horizontal=cell.z===z;burstMatrix.position.set(cell.x-x,.38,cell.z-z);burstMatrix.rotation.set(horizontal?0:Math.PI/2,0,horizontal?Math.PI/2:0);burstMatrix.scale.setScalar(1);burstMatrix.updateMatrix();burst.ribbons.setMatrixAt(index-1,burstMatrix.matrix)}
+        burstMatrix.position.set(cell.x-x,.42,cell.z-z);burstMatrix.rotation.set(0,index*.53,index*.31);burstMatrix.scale.setScalar(index?.9:1.45);burstMatrix.updateMatrix();burst.cores.setMatrixAt(index,burstMatrix.matrix)
+        if(index){const dx=cell.x-x,dz=cell.z-z,horizontal=Math.abs(dx)>Math.abs(dz);burstMatrix.position.set(dx-(horizontal?Math.sign(dx)*.5:0),.2,dz-(horizontal?0:Math.sign(dz)*.5));burstMatrix.rotation.set(0,horizontal?Math.PI/2:0,0);burstMatrix.scale.setScalar(1);burstMatrix.updateMatrix();burst.ribbons.setMatrixAt(index-1,burstMatrix.matrix)}
         burstMatrix.position.set(cell.x-x,.09,cell.z-z);burstMatrix.rotation.set(Math.PI/2,0,0);burstMatrix.scale.setScalar(.35);burstMatrix.updateMatrix();burst.rings.setMatrixAt(index,burstMatrix.matrix)
       })
       for(let index=0;index<36;index++){const cell=burst.cells[index%burst.cells.length];burstMatrix.position.set(cell.x,.34,cell.z);burstMatrix.rotation.set(index*.73,index*1.17,index*.41);burstMatrix.scale.setScalar(.75+index%4*.16);burstMatrix.updateMatrix();burst.shards.setMatrixAt(index,burstMatrix.matrix)}
-      burst.pulses.instanceMatrix.needsUpdate=true;burst.ribbons.instanceMatrix.needsUpdate=true;burst.rings.instanceMatrix.needsUpdate=true;burst.shards.instanceMatrix.needsUpdate=true;spawnParticleExplosion(x,z,team,now);audio.explode(team,chain);shake=Math.max(shake,.2+chain*.05);return cells
+      burst.pulses.instanceMatrix.needsUpdate=true;burst.cores.instanceMatrix.needsUpdate=true;burst.ribbons.instanceMatrix.needsUpdate=true;burst.rings.instanceMatrix.needsUpdate=true;burst.shards.instanceMatrix.needsUpdate=true;spawnParticleExplosion(x,z,team,now);audio.explode(team,chain);shake=Math.max(shake,.2+chain*.05);return cells
     }
     const collectLocalItem=(actor:Actor,item:ItemView)=>{
-      if(item.kind==='KICK')actor.canKick=true
-      if(item.kind==='THROW')actor.canThrow=true
-      if(item.kind==='CAPACITY')actor.bombCapacity=Math.min(GAME_BALANCE.MAX_CORE_CAPACITY,actor.bombCapacity+1)
-      if(item.kind==='PIERCE')actor.pierceCharges=Math.min(3,actor.pierceCharges+1)
-      removeItemView(item.id);say(`${item.kind} ITEM 획득!`)
+      Object.assign(actor,stackItemEffect(actor,item.kind))
+      const level=item.kind==='KICK'?actor.kickLevel:item.kind==='THROW'?actor.throwLevel:item.kind==='CAPACITY'?actor.bombCapacity:actor.pierceCharges
+      removeItemView(item.id);say(`${item.kind} ITEM ×${level} · 효과가 누적됐습니다!`)
     }
     const dropLocalItem=(x:number,z:number)=>{const kind=itemForRoll(Math.random());if(kind)addItemView(`local-item-${++localItemId}`,kind,x,z)}
     const explode=(core:Core,now:number,chain:number)=>{
@@ -458,7 +467,8 @@ export default function SplashArena({onExit,networkSession}:{onExit:()=>void;net
       if(!nearest||nearest.distance>1.65)return null
       const direction=cardinalDirection(),fromX=nearest.core.x,fromZ=nearest.core.z
       let toX=fromX,toZ=fromZ
-      for(let range=1;range<=GAME_BALANCE.THROW_RANGE;range++){
+      const throwRange=throwDistanceForLevel(controlled.throwLevel)
+      for(let range=1;range<=throwRange;range++){
         const nx=fromX+direction.x*range,nz=fromZ+direction.z*range
         if(blocked(nx,nz)||cores.some(core=>core!==nearest.core&&core.x===nx&&core.z===nz))break
         toX=nx;toZ=nz
@@ -471,8 +481,15 @@ export default function SplashArena({onExit,networkSession}:{onExit:()=>void;net
       if(networkClient){networkClient.send({type:'ACTION',seq:++inputSequence,action:'KICK',direction:cardinalDirection()});audio.kick();say('CORE KICK · SERVER VALIDATING');return}
       const nearest=cores.filter(core=>!core.flight).map(core=>({core,distance:Math.hypot(core.x-controlled.x,core.z-controlled.z)})).sort((a,b)=>a.distance-b.distance)[0]
       if(!nearest||nearest.distance>1.55){say('가까운 Core가 없습니다');return}
-      const direction=cardinalDirection(),nx=nearest.core.x+direction.x,nz=nearest.core.z+direction.z
-      if(!blocked(nx,nz)&&!cores.some(core=>core!==nearest.core&&core.x===nx&&core.z===nz)){nearest.core.x=nx;nearest.core.y=0;nearest.core.z=nz;nearest.core.group.position.set(nx,0,nz);faceDirection(controlled,direction.x,direction.z);triggerGesture(controlled,'kick');audio.kick();say('Core를 밀어 경로를 바꿨습니다!')}
+      const direction=cardinalDirection();let moved=false
+      for(let step=0;step<kickDistanceForLevel(controlled.kickLevel);step++){
+        const nx=nearest.core.x+direction.x,nz=nearest.core.z+direction.z,key=`${nx},${nz}`
+        if(Math.abs(nx)>HALF_X||Math.abs(nz)>HALF_Z||holes.has(key)||cores.some(core=>core!==nearest.core&&core.x===nx&&core.z===nz))break
+        if(arenaState.walls.has(key)){destroyWallView(key);dropLocalItem(nx,nz)}
+        if(blocked(nx,nz))break
+        nearest.core.x=nx;nearest.core.y=0;nearest.core.z=nz;moved=true
+      }
+      if(moved){nearest.core.group.position.set(nearest.core.x,0,nearest.core.z);faceDirection(controlled,direction.x,direction.z);triggerGesture(controlled,'kick');audio.kick();say(`CORE KICK LV.${controlled.kickLevel} · ${controlled.kickLevel}칸 밀기!`)}
     }
     const throwCore=()=>{
       if(!canLocalControl())return
@@ -523,9 +540,10 @@ export default function SplashArena({onExit,networkSession}:{onExit:()=>void;net
       actors.forEach((actor,slot)=>{if(!occupied.has(slot)){actor.model.visible=false;actor.shadow.visible=false;actor.rescueRing.visible=false}})
       snapshot.players.forEach(state=>{
         const actor=actors[state.slot];if(!actor)return
+        if(state.variant)setActorVariant(actor,state.variant)
         actor.targetYaw=state.yaw
         const falling=state.falling??false
-        actor.networkId=state.id;actor.x=state.x;actor.z=state.z;actor.serverX=state.x;actor.serverZ=state.z;actor.targetX=state.x;actor.targetZ=state.z;actor.hits=state.hits;actor.bombCapacity=state.bombCapacity;actor.canKick=state.canKick;actor.canThrow=state.canThrow;actor.pierceCharges=state.pierceCharges;actor.jumpY=state.jumpY;actor.buildReady=sampleNow+Math.max(0,(state.buildReady??0)-snapshot.serverTime);actor.jumpReady=sampleNow+Math.max(0,(state.jumpReady??0)-snapshot.serverTime);actor.falling=falling;actor.downedUntil=state.downedUntil;actor.eliminated=state.eliminated
+        actor.networkId=state.id;actor.x=state.x;actor.z=state.z;actor.serverX=state.x;actor.serverZ=state.z;actor.targetX=state.x;actor.targetZ=state.z;actor.hits=state.hits;actor.bombCapacity=state.bombCapacity;actor.canKick=state.canKick;actor.canThrow=state.canThrow;actor.kickLevel=state.kickLevel??(state.canKick?1:0);actor.throwLevel=state.throwLevel??(state.canThrow?1:0);actor.pierceCharges=state.pierceCharges;actor.jumpY=state.jumpY;actor.buildReady=sampleNow+Math.max(0,(state.buildReady??0)-snapshot.serverTime);actor.jumpReady=sampleNow+Math.max(0,(state.jumpReady??0)-snapshot.serverTime);actor.falling=falling;actor.downedUntil=state.downedUntil;actor.eliminated=state.eliminated
         actor.model.visible=!state.eliminated;actor.shadow.visible=!state.eliminated&&!falling;actor.rescueRing.visible=!!state.downedUntil&&!state.eliminated&&!falling;setActorDownedVisual(actor,!!state.downedUntil)
         if(state.id===localNetworkId){
           const wasAlive=!controlled.eliminated
@@ -790,18 +808,20 @@ export default function SplashArena({onExit,networkSession}:{onExit:()=>void;net
       }
       bursts.forEach(burst=>{
         if(!burst.active)return
-        const age=(now-burst.born)/720,fade=Math.max(0,1-age),shockMaterial=burst.shock.material as THREE.MeshBasicMaterial
-        burst.material.opacity=fade*.88;shockMaterial.opacity=fade*.34;burst.shock.scale.setScalar(.3+age*3.2);burst.light.intensity=fade*20
+        const age=(now-burst.born)/820,fade=Math.max(0,1-age),flash=Math.sin(Math.min(1,age*2.4)*Math.PI),shockMaterial=burst.shock.material as THREE.MeshBasicMaterial
+        burst.material.opacity=fade*.78;burst.coreMaterial.opacity=Math.min(.88,fade*1.35);shockMaterial.opacity=fade*.13;burst.shock.scale.setScalar(.24+age*4.1);burst.light.intensity=fade*11
         burst.cells.forEach((cell,index)=>{
-          const cellPulse=.72+Math.sin(Math.min(1,age*1.35)*Math.PI)*.7
-          burstMatrix.position.set(cell.x,.26+Math.sin(Math.min(1,age)*Math.PI)*.36,cell.z);burstMatrix.rotation.set(age*3,index*.37,0);burstMatrix.scale.setScalar(fade*cellPulse*(index?1:1.35));burstMatrix.updateMatrix();burst.pulses.setMatrixAt(index,burstMatrix.matrix)
-          burstMatrix.position.set(cell.x,.08,cell.z);burstMatrix.rotation.set(Math.PI/2,0,index*.21);burstMatrix.scale.setScalar(.3+age*1.75);burstMatrix.updateMatrix();burst.rings.setMatrixAt(index,burstMatrix.matrix)
+          const cellPulse=.82+Math.sin(Math.min(1,age*1.4)*Math.PI)*.58
+          burstMatrix.position.set(cell.x,.34+Math.sin(Math.min(1,age)*Math.PI)*.18,cell.z);burstMatrix.rotation.set(age*2.2,index*.37,0);burstMatrix.scale.setScalar(fade*cellPulse*(index?1:1.42));burstMatrix.updateMatrix();burst.pulses.setMatrixAt(index,burstMatrix.matrix)
+          burstMatrix.position.set(cell.x,.4+Math.sin(Math.min(1,age)*Math.PI)*.12,cell.z);burstMatrix.rotation.set(age*4+index,index*.53,index*.31);burstMatrix.scale.setScalar(fade*(.42+flash*(index?.45:.75)));burstMatrix.updateMatrix();burst.cores.setMatrixAt(index,burstMatrix.matrix)
+          burstMatrix.position.set(cell.x,.08,cell.z);burstMatrix.rotation.set(Math.PI/2,0,index*.21);burstMatrix.scale.setScalar(.26+age*1.9);burstMatrix.updateMatrix();burst.rings.setMatrixAt(index,burstMatrix.matrix)
+          if(index){const horizontal=Math.abs(cell.x)>Math.abs(cell.z);burstMatrix.position.set(cell.x-(horizontal?Math.sign(cell.x)*.5:0),.2,cell.z-(horizontal?0:Math.sign(cell.z)*.5));burstMatrix.rotation.set(0,horizontal?Math.PI/2:0,0);burstMatrix.scale.set(1,fade*(.75+flash*.75),Math.min(1,age*5));burstMatrix.updateMatrix();burst.ribbons.setMatrixAt(index-1,burstMatrix.matrix)}
         })
         for(let index=0;index<36;index++){
           const cell=burst.cells[index%burst.cells.length],angle=index*.91,radius=age*(.34+(index%4)*.13)
           burstMatrix.position.set(cell.x+Math.cos(angle)*radius,.32+age*(1.15+(index%4)*.18)-age*age*1.15,cell.z+Math.sin(angle)*radius);burstMatrix.rotation.set(age*8+index,age*11+index*.4,age*7);burstMatrix.scale.setScalar(fade*(.58+index%3*.14));burstMatrix.updateMatrix();burst.shards.setMatrixAt(index,burstMatrix.matrix)
         }
-        burst.pulses.instanceMatrix.needsUpdate=true;burst.rings.instanceMatrix.needsUpdate=true;burst.shards.instanceMatrix.needsUpdate=true
+        burst.pulses.instanceMatrix.needsUpdate=true;burst.cores.instanceMatrix.needsUpdate=true;burst.ribbons.instanceMatrix.needsUpdate=true;burst.rings.instanceMatrix.needsUpdate=true;burst.shards.instanceMatrix.needsUpdate=true
         if(age>=1){burst.active=false;burst.group.visible=false;burst.light.intensity=0}
       })
       for(let index=particleExplosions.length-1;index>=0;index--){
@@ -821,7 +841,7 @@ export default function SplashArena({onExit,networkSession}:{onExit:()=>void;net
       const desiredCamera=new THREE.Vector3(controlledX-cameraForwardX*6.4,4.25,controlledZ-cameraForwardZ*6.4)
       if(shake>.002){desiredCamera.x+=(Math.random()-.5)*shake;desiredCamera.y+=(Math.random()-.5)*shake*.45;shake*=.88}
       camera.position.lerp(desiredCamera,1-Math.exp(-dt*6.2));camera.lookAt(controlledX+cameraForwardX*2.4,1.05,controlledZ+cameraForwardZ*2.4);renderer.render(scene,camera)
-      if(now-lastUi>100){lastUi=now;const ownerId=networkClient?localNetworkId:controlled.id;setUi(v=>({...v,time:Math.max(0,Math.floor(networkClient?networkRemaining:GAME_BALANCE.MATCH_SECONDS-elapsed)),countdown:presentedCountdown,localTeam:controlled.team,playerHits:controlled.hits,maxHealth:GAME_BALANCE.PLAYER_MAX_HITS,health:Math.max(0,GAME_BALANCE.PLAYER_MAX_HITS-controlled.hits),jump:Math.min(1,Math.max(0,(now-controlled.jumpReady+GAME_BALANCE.JUMP_COOLDOWN_MS)/GAME_BALANCE.JUMP_COOLDOWN_MS)),botHits:bot.hits,allyHits:ally.hits,rival2Hits:vio.hits,alliesAlive:actors.filter(actor=>actor.team===controlled.team&&!actor.eliminated&&actor.model.visible).length,rivalsAlive:actors.filter(actor=>actor.team!==controlled.team&&!actor.eliminated&&actor.model.visible).length,onlineHumans:networkHumanCount,cores:Math.max(0,controlled.bombCapacity-cores.filter(core=>core.owner===ownerId).length),capacity:controlled.bombCapacity,canKick:controlled.canKick,canThrow:controlled.canThrow,pierceCharges:controlled.pierceCharges,chain:chainBest,dash:Math.min(1,Math.max(0,(now-controlled.dashReady+GAME_BALANCE.DASH_COOLDOWN_MS)/GAME_BALANCE.DASH_COOLDOWN_MS)),build:Math.min(1,Math.max(0,(now-controlled.buildReady+GAME_BALANCE.BUILD_COOLDOWN_MS)/GAME_BALANCE.BUILD_COOLDOWN_MS)),fan:fanState,vehicle:vehicleActive,fps:Math.round(1/Math.max(.001,dt)),frameMs:Number((dt*1000).toFixed(1)),drawCalls:renderer.info.render.calls,triangles:renderer.info.render.triangles,textures:renderer.info.memory.textures,simBodies:actors.filter(actor=>actor.model.visible).length+cores.length+itemViews.size,rtt:networkRtt,packetRate,pendingInputs:pendingInputs.length,serverPos:`${controlled.serverX.toFixed(2)},${controlled.serverZ.toFixed(2)}`,clientPos:`${controlled.x.toFixed(2)},${controlled.z.toFixed(2)}`}))}
+      if(now-lastUi>100){lastUi=now;const ownerId=networkClient?localNetworkId:controlled.id;setUi(v=>({...v,time:Math.max(0,Math.floor(networkClient?networkRemaining:GAME_BALANCE.MATCH_SECONDS-elapsed)),countdown:presentedCountdown,localTeam:controlled.team,playerHits:controlled.hits,maxHealth:GAME_BALANCE.PLAYER_MAX_HITS,health:Math.max(0,GAME_BALANCE.PLAYER_MAX_HITS-controlled.hits),jump:Math.min(1,Math.max(0,(now-controlled.jumpReady+GAME_BALANCE.JUMP_COOLDOWN_MS)/GAME_BALANCE.JUMP_COOLDOWN_MS)),botHits:bot.hits,allyHits:ally.hits,rival2Hits:vio.hits,alliesAlive:actors.filter(actor=>actor.team===controlled.team&&!actor.eliminated&&actor.model.visible).length,rivalsAlive:actors.filter(actor=>actor.team!==controlled.team&&!actor.eliminated&&actor.model.visible).length,onlineHumans:networkHumanCount,cores:Math.max(0,controlled.bombCapacity-cores.filter(core=>core.owner===ownerId).length),capacity:controlled.bombCapacity,canKick:controlled.canKick,canThrow:controlled.canThrow,kickLevel:controlled.kickLevel,throwLevel:controlled.throwLevel,pierceCharges:controlled.pierceCharges,chain:chainBest,dash:Math.min(1,Math.max(0,(now-controlled.dashReady+GAME_BALANCE.DASH_COOLDOWN_MS)/GAME_BALANCE.DASH_COOLDOWN_MS)),build:Math.min(1,Math.max(0,(now-controlled.buildReady+GAME_BALANCE.BUILD_COOLDOWN_MS)/GAME_BALANCE.BUILD_COOLDOWN_MS)),fan:fanState,vehicle:vehicleActive,fps:Math.round(1/Math.max(.001,dt)),frameMs:Number((dt*1000).toFixed(1)),drawCalls:renderer.info.render.calls,triangles:renderer.info.render.triangles,textures:renderer.info.memory.textures,simBodies:actors.filter(actor=>actor.model.visible).length+cores.length+itemViews.size,rtt:networkRtt,packetRate:packetRate,pendingInputs:pendingInputs.length,serverPos:`${controlled.serverX.toFixed(2)},${controlled.serverZ.toFixed(2)}`,clientPos:`${controlled.x.toFixed(2)},${controlled.z.toFixed(2)}`}))}
       frame=requestAnimationFrame(loop)
     }
     frame=requestAnimationFrame(loop)
@@ -830,11 +850,12 @@ export default function SplashArena({onExit,networkSession}:{onExit:()=>void;net
       renderer.dispose();scene.traverse(object=>{if(object instanceof THREE.Mesh||object instanceof THREE.Sprite){object.geometry?.dispose?.();const material=(object as THREE.Mesh).material;if(Array.isArray(material))material.forEach(item=>item.dispose());else material?.dispose()}})
       if(host.contains(renderer.domElement))host.removeChild(renderer.domElement)
     }
-  },[round,networkSession])
+  },[round,networkSession,selectedVariant])
 
   const restart=()=>{setResult(null);setUi(value=>({...initialUi(),localTeam:value.localTeam,message:networkSession?'재경기를 서버에 요청했습니다…':'F로 Core를 설치하고 SPACE로 위험을 뛰어넘으세요'}));if(networkSession&&networkClientRef.current){networkClientRef.current.send({type:'REMATCH'});return}setRound(value=>value+1)}
   const localCyan=ui.localTeam==='cyan'
-  const yourTeam=localCyan?{names:'BLOO · LUMI',images:[BLUE,YELLOW]}:{names:'CORAL · VIO',images:[RED,VIO]}
+  const selectedInfo=VARIANT_INFO[selectedVariant]
+  const yourTeam=localCyan?{names:`${selectedInfo.name} · LUMI`,images:[selectedInfo.image,YELLOW]}:{names:`${selectedInfo.name} · VIO`,images:[selectedInfo.image,VIO]}
   const rivalTeam=localCyan?{names:'CORAL · VIO',images:[RED,VIO]}:{names:'BLOO · LUMI',images:[BLUE,YELLOW]}
   const winnerTeam=result==='win'?yourTeam:rivalTeam
   const cooldownLabel=(ratio:number,ms:number)=>ratio>=.99?'READY':`${Math.max(.1,Number((((1-ratio)*ms)/1000).toFixed(1)))}초`
@@ -847,8 +868,8 @@ export default function SplashArena({onExit,networkSession}:{onExit:()=>void;net
       <b>{ui.health}/{ui.maxHealth}</b>
     </div>
     <aside className="status-panel"><span><Bot/> {networkSession?`ONLINE ${ui.onlineHumans}/4 · BOT FILL`:'3 BOT FILL · 2V2'}</span><span><Gauge/> 30 HZ LOGIC</span><span><Crosshair/> {debug?'DEBUG GRID + COLLIDERS':'HIDDEN GRID'}</span><span className={`fan-state ${ui.fan.toLowerCase()}`}><Wind/> FAN {ui.fan}</span>{ui.vehicle&&<span className="vehicle-state"><Zap/> TOY EXPRESS ACTIVE</span>}{debug&&<><span className="debug-stat">FPS {ui.fps} · {ui.frameMs} MS</span><span className="debug-stat">DRAW {ui.drawCalls} · TRIS {ui.triangles.toLocaleString()}</span><span className="debug-stat">TEX {ui.textures} · SIM BODIES {ui.simBodies}</span><span className="debug-stat">SERVER {ui.serverPos} · CLIENT {ui.clientPos}</span>{networkSession&&<><span className="debug-stat">RTT {ui.rtt} MS · RX {ui.packetRate}/S</span><span className="debug-stat">PENDING INPUT {ui.pendingInputs}</span></>}</>}</aside>
-    <section className="ability-bar"><div><kbd>F</kbd><span className="core-orb"/><p><b>SPLASH CORE</b><small>{ui.cores} / {ui.capacity} READY</small></p></div><div className={ui.jump<.99?'cooling':''}><kbd>SPACE</kbd><ArrowUp/><p><b>JUMP</b><small>{ui.jump>=.99?'READY':`RECHARGING (${cooldownLabel(ui.jump,GAME_BALANCE.JUMP_COOLDOWN_MS)})`}</small></p></div><div className={ui.build<.99?'cooling':''}><kbd>C</kbd><Box/><p><b>BLOCK BUILD</b><small>{ui.build>=.99?'READY':`COOLDOWN (${cooldownLabel(ui.build,GAME_BALANCE.BUILD_COOLDOWN_MS)})`}</small></p></div><div className={ui.dash<.99?'cooling':''}><kbd>SHIFT</kbd><Zap/><p><b>RIPPLE DASH</b><small>{ui.dash>=.99?'READY':`RECHARGING (${cooldownLabel(ui.dash,GAME_BALANCE.DASH_COOLDOWN_MS)})`}</small></p></div><div className={ui.canKick?'':'locked'}><kbd>E</kbd><HeartPulse/><p><b>CORE KICK</b><small>{ui.canKick?'ITEM READY':'ITEM LOCKED'}</small></p></div><div className={ui.canThrow?'':'locked'}><kbd>Q</kbd><Send/><p><b>CORE THROW</b><small>{ui.canThrow?'ITEM READY':'ITEM LOCKED'}</small></p></div>{(ui.chain>1||ui.pierceCharges>0)&&<strong>{ui.pierceCharges>0?`PIERCE ×${ui.pierceCharges}`:`CHAIN ×${ui.chain}`}</strong>}</section>
-    <div className="controls">WASD 이동 <i/> SPACE 점프 <i/> F 폭탄 <i/> C 장애물 <i/> SHIFT 대시 <i/> E 밀기 <i/> Q 투척 <i/> R 구조</div>
+    <section className="ability-bar"><div><kbd>F</kbd><span className="core-orb"/><p><b>SPLASH CORE</b><small>{ui.cores} / {ui.capacity} READY</small></p></div><div className={ui.jump<.99?'cooling':''}><kbd>SPACE</kbd><ArrowUp/><p><b>JUMP</b><small>{ui.jump>=.99?'READY':`RECHARGING (${cooldownLabel(ui.jump,GAME_BALANCE.JUMP_COOLDOWN_MS)})`}</small></p></div><div className={ui.build<.99?'cooling':''}><kbd>C</kbd><Box/><p><b>BLOCK BUILD</b><small>{ui.build>=.99?'READY':`COOLDOWN (${cooldownLabel(ui.build,GAME_BALANCE.BUILD_COOLDOWN_MS)})`}</small></p></div><div className={ui.dash<.99?'cooling':''}><kbd>SHIFT</kbd><Zap/><p><b>RIPPLE DASH</b><small>{ui.dash>=.99?'READY':`RECHARGING (${cooldownLabel(ui.dash,GAME_BALANCE.DASH_COOLDOWN_MS)})`}</small></p></div>{ui.canKick&&<div><kbd>E</kbd><HeartPulse/><p><b>CORE KICK</b><small>LV.{ui.kickLevel} · {kickDistanceForLevel(ui.kickLevel)}칸 밀기</small></p></div>}{ui.canThrow&&<div><kbd>Q</kbd><Send/><p><b>CORE THROW</b><small>LV.{ui.throwLevel} · RANGE {throwDistanceForLevel(ui.throwLevel)}</small></p></div>}{(ui.chain>1||ui.pierceCharges>0)&&<strong>{ui.pierceCharges>0?`PIERCE ×${ui.pierceCharges}`:`CHAIN ×${ui.chain}`}</strong>}</section>
+    <div className="controls">WASD 이동 <i/> SPACE 점프 <i/> F 폭탄 <i/> C 장애물 <i/> SHIFT 대시 {ui.canKick&&<><i/> E 밀기</>} {ui.canThrow&&<><i/> Q 투척</>} <i/> R 구조</div>
     {ui.countdown>0&&<div className="match-countdown"><span>GET READY</span><strong>{ui.countdown}</strong><small>PREDICT · MANIPULATE · ESCAPE</small></div>}
     {result&&<div className="result-overlay"><div className={`result-panel ${result}`}><span>{result==='win'?'YOUR TEAM SECURED':'YOUR TEAM FLUX LOCKED'}</span><h1>{winnerTeam.names.replace(' · ',' & ')} WIN!</h1><p>{result==='win'?'연쇄 파동과 구조 타이밍으로 팀이 끝까지 살아남았습니다.':'아군이 잠긴 6초 동안 접근해 R로 구조하면 흐름을 뒤집을 수 있습니다.'}</p><div><button onClick={restart}><RotateCcw/> 한 판 더</button><button onClick={onExit}>로비로</button></div></div></div>}
   </main>

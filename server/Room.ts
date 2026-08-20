@@ -2,8 +2,8 @@ import { GIANT_PLAYROOM } from '../src/game-core/arena'
 import { GAME_BALANCE } from '../src/game-core/config'
 import { blastHitWalls } from '../src/game-core/destruction'
 import { cellKey, isCellBlocked, traceExplosion, worldToGrid } from '../src/game-core/grid'
-import { itemForRoll, piercingFloorCells, tracePiercingExplosion } from '../src/game-core/powerups'
-import type { ItemKind, NetworkCore, NetworkItem, NetworkPlayer, RoomSnapshot, Team } from '../src/game-core/protocol'
+import { itemForRoll, kickDistanceForLevel, piercingFloorCells, stackItemEffect, throwDistanceForLevel, tracePiercingExplosion } from '../src/game-core/powerups'
+import type { ItemKind, NetworkCore, NetworkItem, NetworkPlayer, RippleVariant, RoomSnapshot, Team } from '../src/game-core/protocol'
 import { matchWinner } from '../src/game-core/rules'
 import { fanStateAt, vehicleStateAt } from '../src/game-core/timeline'
 
@@ -32,7 +32,7 @@ export class Room{
 
   constructor(readonly id:string,now=Date.now(),private readonly random:()=>number=Math.random){this.startedAt=now;this.lastHumanJoin=now}
 
-  join(id:string,name:string,now=Date.now()){
+  join(id:string,name:string,now=Date.now(),variant:RippleVariant='bloo'){
     if(![...this.players.values()].some(player=>!player.bot)){
       this.players.clear();this.cores.clear();this.items.clear();this.events.length=0;this.tick=0;this.startedAt=now;this.winner=null;this.lastFanPush=0;this.lastVehicleCell=-99;this.startedEventSent=false;this.resetArena()
     }
@@ -41,7 +41,8 @@ export class Room{
     if(slot===undefined){const replaceable=[...this.players.values()].filter(player=>player.bot).sort((a,b)=>a.slot-b.slot)[0];if(replaceable){slot=replaceable.slot;this.leave(replaceable.id)}}
     if(slot===undefined)throw new Error('ROOM_FULL')
     const spawn=GIANT_PLAYROOM.spawnPoints[slot],team:Team=slot<2?'cyan':'coral',yaw=team==='cyan'?Math.PI/2:-Math.PI/2
-    const player:PlayerState={id,name:name.slice(0,16)||`RIPPLE-${slot+1}`,slot,bot:false,team,x:spawn.x,z:spawn.z,yaw,hits:0,bombCapacity:GAME_BALANCE.CORE_CAPACITY,canKick:false,canThrow:false,pierceCharges:0,jumpY:0,jumpReady:0,buildReady:0,falling:false,downedUntil:0,eliminated:false,lastInput:0,input:{dx:0,dz:0,seq:0},dashReady:0,nextAction:0,jumpStarted:0,jumpUntil:0,jumpBaseY:0,fallVelocity:0}
+    const selectedVariant:RippleVariant=['bloo','lumi','coral','vio'].includes(variant)?variant:'bloo'
+    const player:PlayerState={id,name:name.slice(0,16)||`RIPPLE-${slot+1}`,slot,bot:false,team,variant:selectedVariant,x:spawn.x,z:spawn.z,yaw,hits:0,bombCapacity:GAME_BALANCE.CORE_CAPACITY,canKick:false,canThrow:false,kickLevel:0,throwLevel:0,pierceCharges:0,jumpY:0,jumpReady:0,buildReady:0,falling:false,downedUntil:0,eliminated:false,lastInput:0,input:{dx:0,dz:0,seq:0},dashReady:0,nextAction:0,jumpStarted:0,jumpUntil:0,jumpBaseY:0,fallVelocity:0}
     this.lastHumanJoin=now
     this.players.set(id,player);this.events.push({event:'PLAYER_JOINED',actorId:id});return player
   }
@@ -91,11 +92,12 @@ export class Room{
     if(!nearest||nearest.distance>1.65)return false
     if(action==='KICK'){
       if(!player.canKick)return false
-      if(!this.moveCoreThroughObstacles(player,nearest.core,cardinal,1))return false
+      if(!this.moveCoreThroughObstacles(player,nearest.core,cardinal,kickDistanceForLevel(player.kickLevel)))return false
       player.yaw=Math.atan2(cardinal.x,cardinal.z);this.events.push({event:'CORE_KICKED',actorId:id,coreId:nearest.core.id});return true
     }
     if(!player.canThrow)return false
-    if(!this.moveCoreThroughObstacles(player,nearest.core,cardinal,GAME_BALANCE.THROW_RANGE))return false
+    const throwRange=throwDistanceForLevel(player.throwLevel)
+    if(!this.moveCoreThroughObstacles(player,nearest.core,cardinal,throwRange))return false
     player.yaw=Math.atan2(cardinal.x,cardinal.z);this.events.push({event:'CORE_THROWN',actorId:id,coreId:nearest.core.id});return true
   }
 
@@ -105,7 +107,7 @@ export class Room{
     this.cores.clear();this.items.clear();this.winner=null;this.startedAt=now;this.tick=0;this.lastFanPush=0;this.lastVehicleCell=-99;this.lastHumanJoin=now;this.startedEventSent=false;this.resetArena()
     for(const player of this.players.values()){
       const spawn=GIANT_PLAYROOM.spawnPoints[player.slot]
-      player.x=spawn.x;player.z=spawn.z;player.yaw=player.team==='cyan'?Math.PI/2:-Math.PI/2;player.hits=0;player.bombCapacity=GAME_BALANCE.CORE_CAPACITY;player.canKick=false;player.canThrow=false;player.pierceCharges=0;player.jumpY=0;player.jumpReady=0;player.jumpStarted=0;player.jumpUntil=0;player.jumpBaseY=0;player.buildReady=0;player.falling=false;player.fallVelocity=0;player.downedUntil=0;player.eliminated=false;player.dashReady=0;player.nextAction=now+800+player.slot*350
+      player.x=spawn.x;player.z=spawn.z;player.yaw=player.team==='cyan'?Math.PI/2:-Math.PI/2;player.hits=0;player.bombCapacity=GAME_BALANCE.CORE_CAPACITY;player.canKick=false;player.canThrow=false;player.kickLevel=0;player.throwLevel=0;player.pierceCharges=0;player.jumpY=0;player.jumpReady=0;player.jumpStarted=0;player.jumpUntil=0;player.jumpBaseY=0;player.buildReady=0;player.falling=false;player.fallVelocity=0;player.downedUntil=0;player.eliminated=false;player.dashReady=0;player.nextAction=now+800+player.slot*350
       player.input={dx:0,dz:0,seq:player.input.seq};player.lastInput=player.input.seq
     }
     this.events.length=0;this.events.push({event:'MATCH_RESTARTED',actorId:id});return true
@@ -265,11 +267,11 @@ export class Room{
   private fillBots(now:number){
     if(![...this.players.values()].some(player=>!player.bot))return
     if(now-this.lastHumanJoin<900)return
-    const names=['BLOO BOT','LUMI BOT','CORAL BOT','VIO BOT']
+    const names=['BLOO BOT','LUMI BOT','CORAL BOT','VIO BOT'],variants:RippleVariant[]=['bloo','lumi','coral','vio']
     for(let slot=0;slot<4;slot++){
       if([...this.players.values()].some(player=>player.slot===slot))continue
       const spawn=GIANT_PLAYROOM.spawnPoints[slot],team:Team=slot<2?'cyan':'coral',id=`bot-${++this.botId}`,yaw=team==='cyan'?Math.PI/2:-Math.PI/2
-      this.players.set(id,{id,name:names[slot],slot,bot:true,team,x:spawn.x,z:spawn.z,yaw,hits:0,bombCapacity:GAME_BALANCE.CORE_CAPACITY,canKick:false,canThrow:false,pierceCharges:0,jumpY:0,jumpReady:0,buildReady:0,falling:false,downedUntil:0,eliminated:false,lastInput:0,input:{dx:0,dz:0,seq:0},dashReady:0,nextAction:now+800+slot*350,jumpStarted:0,jumpUntil:0,jumpBaseY:0,fallVelocity:0})
+      this.players.set(id,{id,name:names[slot],slot,bot:true,team,variant:variants[slot],x:spawn.x,z:spawn.z,yaw,hits:0,bombCapacity:GAME_BALANCE.CORE_CAPACITY,canKick:false,canThrow:false,kickLevel:0,throwLevel:0,pierceCharges:0,jumpY:0,jumpReady:0,buildReady:0,falling:false,downedUntil:0,eliminated:false,lastInput:0,input:{dx:0,dz:0,seq:0},dashReady:0,nextAction:now+800+slot*350,jumpStarted:0,jumpUntil:0,jumpBaseY:0,fallVelocity:0})
       this.events.push({event:'BOT_FILLED',actorId:id})
     }
   }
@@ -307,10 +309,7 @@ export class Room{
     const id=`item-${++this.itemId}`;this.items.set(id,{id,kind,x,z});this.events.push({event:'ITEM_SPAWNED',itemId:id,kind,x,z})
   }
   private collectItem(player:PlayerState,item:NetworkItem){
-    if(item.kind==='KICK')player.canKick=true
-    if(item.kind==='THROW')player.canThrow=true
-    if(item.kind==='CAPACITY')player.bombCapacity=Math.min(GAME_BALANCE.MAX_CORE_CAPACITY,player.bombCapacity+1)
-    if(item.kind==='PIERCE')player.pierceCharges=Math.min(3,player.pierceCharges+1)
+    Object.assign(player,stackItemEffect(player,item.kind))
     this.items.delete(item.id);this.events.push({event:'ITEM_COLLECTED',actorId:player.id,itemId:item.id,kind:item.kind,x:item.x,z:item.z})
   }
   private resetArena(){this.arena.walls.clear();for(const wall of GIANT_PLAYROOM.walls)this.arena.walls.add(wall);this.destroyedWalls.clear();this.holes.clear();this.items.clear()}
