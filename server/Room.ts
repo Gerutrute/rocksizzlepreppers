@@ -8,7 +8,7 @@ import { matchWinner } from '../src/game-core/rules'
 import { fanStateAt, vehicleStateAt } from '../src/game-core/timeline'
 
 type InputState={dx:number;dz:number;seq:number}
-type PlayerState=NetworkPlayer&{input:InputState;dashReady:number;nextAction:number;jumpStarted:number;jumpUntil:number;jumpBaseY:number;fallVelocity:number}
+type PlayerState=NetworkPlayer&{input:InputState;dashReady:number;nextAction:number;jumpStarted:number;jumpUntil:number;jumpReady:number;jumpBaseY:number;fallVelocity:number}
 type CoreState=NetworkCore&{fuse:number;chain:number}
 
 export class Room{
@@ -16,7 +16,7 @@ export class Room{
   readonly cores=new Map<string,CoreState>()
   readonly items=new Map<string,NetworkItem>()
   readonly holes=new Set<string>()
-  readonly events:Array<{event:string;actorId?:string;targetId?:string;coreId?:string;itemId?:string;kind?:ItemKind;x?:number;y?:number;z?:number;team?:Team;chain?:number;piercing?:boolean}>=[]
+  readonly events:Array<{event:string;actorId?:string;targetId?:string;coreId?:string;itemId?:string;kind?:ItemKind;x?:number;y?:number;z?:number;team?:Team;chain?:number;piercing?:boolean;damage?:number;hits?:number;remainingHits?:number;maxHits?:number}>=[]
   readonly arena={...GIANT_PLAYROOM,walls:new Set(GIANT_PLAYROOM.walls)}
   readonly destroyedWalls=new Set<string>()
   tick=0
@@ -41,7 +41,7 @@ export class Room{
     if(slot===undefined){const replaceable=[...this.players.values()].filter(player=>player.bot).sort((a,b)=>a.slot-b.slot)[0];if(replaceable){slot=replaceable.slot;this.leave(replaceable.id)}}
     if(slot===undefined)throw new Error('ROOM_FULL')
     const spawn=GIANT_PLAYROOM.spawnPoints[slot],team:Team=slot<2?'cyan':'coral',yaw=team==='cyan'?Math.PI/2:-Math.PI/2
-    const player:PlayerState={id,name:name.slice(0,16)||`RIPPLE-${slot+1}`,slot,bot:false,team,x:spawn.x,z:spawn.z,yaw,hits:0,bombCapacity:GAME_BALANCE.CORE_CAPACITY,canKick:false,canThrow:false,pierceCharges:0,jumpY:0,buildReady:0,falling:false,downedUntil:0,eliminated:false,lastInput:0,input:{dx:0,dz:0,seq:0},dashReady:0,nextAction:0,jumpStarted:0,jumpUntil:0,jumpBaseY:0,fallVelocity:0}
+    const player:PlayerState={id,name:name.slice(0,16)||`RIPPLE-${slot+1}`,slot,bot:false,team,x:spawn.x,z:spawn.z,yaw,hits:0,bombCapacity:GAME_BALANCE.CORE_CAPACITY,canKick:false,canThrow:false,pierceCharges:0,jumpY:0,jumpReady:0,buildReady:0,falling:false,downedUntil:0,eliminated:false,lastInput:0,input:{dx:0,dz:0,seq:0},dashReady:0,nextAction:0,jumpStarted:0,jumpUntil:0,jumpBaseY:0,fallVelocity:0}
     this.lastHumanJoin=now
     this.players.set(id,player);this.events.push({event:'PLAYER_JOINED',actorId:id});return player
   }
@@ -61,45 +61,42 @@ export class Room{
     const cardinal=Math.abs(direction.x)>=Math.abs(direction.z)?{x:Math.sign(direction.x)||1,z:0}:{x:0,z:Math.sign(direction.z)||1}
     if(action==='PLACE')return this.placeCore(player)
     if(action==='JUMP'){
-      if(now<player.jumpUntil)return false
-      player.jumpBaseY=player.jumpY;player.jumpStarted=now;player.jumpUntil=now+GAME_BALANCE.JUMP_DURATION_MS;this.events.push({event:'PLAYER_JUMPED',actorId:id});return true
+      if(now<player.jumpUntil||now<player.jumpReady)return false
+      player.jumpBaseY=player.jumpY;player.jumpStarted=now;player.jumpUntil=now+GAME_BALANCE.JUMP_DURATION_MS;player.jumpReady=now+GAME_BALANCE.JUMP_COOLDOWN_MS;player.fallVelocity=0;this.events.push({event:'PLAYER_JUMPED',actorId:id});return true
     }
     if(action==='BUILD'){
       if(now<player.buildReady)return false
       const cell=worldToGrid({x:player.x+cardinal.x*1.05,z:player.z+cardinal.z*1.05}),key=cellKey(cell)
       if(Math.abs(cell.x)>this.arena.halfX||Math.abs(cell.z)>this.arena.halfZ||this.arena.walls.has(key)||this.holes.has(key)||this.coreAt(cell.x,cell.z)||[...this.players.values()].some(other=>!other.eliminated&&Math.hypot(other.x-cell.x,other.z-cell.z)<.72))return false
-      this.arena.walls.add(key);this.destroyedWalls.delete(key);player.buildReady=now+GAME_BALANCE.BUILD_COOLDOWN_MS;this.events.push({event:'WALL_BUILT',actorId:id,x:cell.x,z:cell.z});return true
+      this.arena.walls.add(key);this.destroyedWalls.delete(key);player.yaw=Math.atan2(cardinal.x,cardinal.z);player.buildReady=now+GAME_BALANCE.BUILD_COOLDOWN_MS;this.events.push({event:'WALL_BUILT',actorId:id,x:cell.x,z:cell.z});return true
     }
     if(action==='DASH'){
       if(now<player.dashReady)return false
       player.yaw=Math.atan2(cardinal.x,cardinal.z)
       player.dashReady=now+GAME_BALANCE.DASH_COOLDOWN_MS
       const steps=12,step=GAME_BALANCE.DASH_DISTANCE/steps
-      for(let index=0;index<steps;index++){const x=player.x+cardinal.x*step,z=player.z+cardinal.z*step;if(!this.canOccupy(player,x,z))break;player.x=x;player.z=z}
+      for(let index=0;index<steps;index++){
+        const x=player.x+cardinal.x*step,z=player.z+cardinal.z*step
+        if(!this.canOccupy(player,x,z,this.jumpHeightAt(player,now,x,z)))break
+        player.x=x;player.z=z
+      }
       this.events.push({event:'PLAYER_DASHED',actorId:id});return true
     }
     if(action==='RESCUE'){
       const target=[...this.players.values()].filter(other=>other.team===player.team&&other.id!==id&&other.downedUntil&&!other.eliminated).sort((a,b)=>Math.hypot(a.x-player.x,a.z-player.z)-Math.hypot(b.x-player.x,b.z-player.z))[0]
       if(!target||Math.hypot(target.x-player.x,target.z-player.z)>1.45)return false
-      target.hits=2;target.downedUntil=0;this.events.push({event:'PLAYER_RESCUED',actorId:id,targetId:target.id});return true
+      target.hits=2;target.downedUntil=0;player.yaw=Math.atan2(target.x-player.x,target.z-player.z);this.events.push({event:'PLAYER_RESCUED',actorId:id,targetId:target.id});return true
     }
     const nearest=[...this.cores.values()].map(core=>({core,distance:Math.hypot(core.x-player.x,core.z-player.z)})).sort((a,b)=>a.distance-b.distance)[0]
     if(!nearest||nearest.distance>1.65)return false
     if(action==='KICK'){
       if(!player.canKick)return false
-      const x=nearest.core.x+cardinal.x,z=nearest.core.z+cardinal.z
-      if(isCellBlocked(this.arena,{x,z})||this.coreAt(x,z,nearest.core.id))return false
-      nearest.core.x=x;nearest.core.z=z;nearest.core.y=0;this.events.push({event:'CORE_KICKED',actorId:id,coreId:nearest.core.id});return true
+      if(!this.moveCoreThroughObstacles(player,nearest.core,cardinal,1))return false
+      player.yaw=Math.atan2(cardinal.x,cardinal.z);this.events.push({event:'CORE_KICKED',actorId:id,coreId:nearest.core.id});return true
     }
     if(!player.canThrow)return false
-    let x=nearest.core.x,z=nearest.core.z
-    for(let range=1;range<=GAME_BALANCE.THROW_RANGE;range++){
-      const nextX=nearest.core.x+cardinal.x*range,nextZ=nearest.core.z+cardinal.z*range
-      if(isCellBlocked(this.arena,{x:nextX,z:nextZ})||this.coreAt(nextX,nextZ,nearest.core.id))break
-      x=nextX;z=nextZ
-    }
-    if(x===nearest.core.x&&z===nearest.core.z)return false
-    nearest.core.x=x;nearest.core.z=z;nearest.core.y=0;this.events.push({event:'CORE_THROWN',actorId:id,coreId:nearest.core.id});return true
+    if(!this.moveCoreThroughObstacles(player,nearest.core,cardinal,GAME_BALANCE.THROW_RANGE))return false
+    player.yaw=Math.atan2(cardinal.x,cardinal.z);this.events.push({event:'CORE_THROWN',actorId:id,coreId:nearest.core.id});return true
   }
 
   rematch(id:string,now=Date.now()){
@@ -108,7 +105,7 @@ export class Room{
     this.cores.clear();this.items.clear();this.winner=null;this.startedAt=now;this.tick=0;this.lastFanPush=0;this.lastVehicleCell=-99;this.lastHumanJoin=now;this.startedEventSent=false;this.resetArena()
     for(const player of this.players.values()){
       const spawn=GIANT_PLAYROOM.spawnPoints[player.slot]
-      player.x=spawn.x;player.z=spawn.z;player.yaw=player.team==='cyan'?Math.PI/2:-Math.PI/2;player.hits=0;player.bombCapacity=GAME_BALANCE.CORE_CAPACITY;player.canKick=false;player.canThrow=false;player.pierceCharges=0;player.jumpY=0;player.jumpStarted=0;player.jumpUntil=0;player.jumpBaseY=0;player.buildReady=0;player.falling=false;player.fallVelocity=0;player.downedUntil=0;player.eliminated=false;player.dashReady=0;player.nextAction=now+800+player.slot*350
+      player.x=spawn.x;player.z=spawn.z;player.yaw=player.team==='cyan'?Math.PI/2:-Math.PI/2;player.hits=0;player.bombCapacity=GAME_BALANCE.CORE_CAPACITY;player.canKick=false;player.canThrow=false;player.pierceCharges=0;player.jumpY=0;player.jumpReady=0;player.jumpStarted=0;player.jumpUntil=0;player.jumpBaseY=0;player.buildReady=0;player.falling=false;player.fallVelocity=0;player.downedUntil=0;player.eliminated=false;player.dashReady=0;player.nextAction=now+800+player.slot*350
       player.input={dx:0,dz:0,seq:player.input.seq};player.lastInput=player.input.seq
     }
     this.events.length=0;this.events.push({event:'MATCH_RESTARTED',actorId:id});return true
@@ -141,6 +138,7 @@ export class Room{
         else this.placeCore(brain)
       }
     }
+    const movementSampleTime=now+dt*1000*0.5
     for(const player of this.players.values()){
       if(player.eliminated)continue
       if(player.falling){
@@ -148,14 +146,29 @@ export class Room{
         if(player.jumpY<=GAME_BALANCE.FALL_DEATH_Y){player.eliminated=true;player.falling=false;player.downedUntil=0;this.events.push({event:'PLAYER_FELL',actorId:player.id,x:player.x,y:player.jumpY,z:player.z})}
         continue
       }
-      player.jumpY=now<player.jumpUntil?player.jumpBaseY+Math.sin(Math.max(0,Math.min(1,(now-player.jumpStarted)/GAME_BALANCE.JUMP_DURATION_MS))*Math.PI)*GAME_BALANCE.JUMP_HEIGHT:this.supportHeightAt(player.x,player.z)
+      if(movementSampleTime<player.jumpUntil){
+        player.fallVelocity=0
+        player.jumpY=this.jumpHeightAt(player,movementSampleTime,player.x,player.z)
+      }else{
+        const support=this.supportHeightAt(player.x,player.z)
+        if(support>0&&player.jumpY>=support-.01){player.jumpY=support;player.fallVelocity=0}
+        else if(player.jumpY>support){
+          player.fallVelocity+=GAME_BALANCE.FALL_GRAVITY*dt
+          player.jumpY=Math.max(support,player.jumpY-player.fallVelocity*dt)
+          if(player.jumpY===support)player.fallVelocity=0
+        }else{player.jumpY=support;player.fallVelocity=0}
+      }
       if(player.downedUntil&&now>=player.downedUntil){player.eliminated=true;player.downedUntil=0;this.events.push({event:'PLAYER_ELIMINATED',actorId:player.id});continue}
       if(player.downedUntil)continue
       if(Math.hypot(player.input.dx,player.input.dz)>.02)player.yaw=Math.atan2(player.input.dx,player.input.dz)
       const speed=GAME_BALANCE.PLAYER_SPEED*dt,nx=player.x+player.input.dx*speed,nz=player.z+player.input.dz*speed
-      if(this.canOccupy(player,nx,player.z))player.x=Math.max(-GIANT_PLAYROOM.halfX-.28,Math.min(GIANT_PLAYROOM.halfX+.28,nx))
-      if(this.canOccupy(player,player.x,nz))player.z=Math.max(-GIANT_PLAYROOM.halfZ-.28,Math.min(GIANT_PLAYROOM.halfZ+.28,nz))
-      if(fan==='ACTIVE'){const windX=player.x-1.05*dt;if(this.canOccupy(player,windX,player.z))player.x=Math.max(-GIANT_PLAYROOM.halfX-.28,windX)}
+      const occupancyJumpYFor=(x:number,z:number)=>this.jumpHeightAt(player,movementSampleTime,x,z)
+      if(this.canOccupy(player,nx,player.z,occupancyJumpYFor(nx,player.z))){player.x=Math.max(-GIANT_PLAYROOM.halfX-.28,Math.min(GIANT_PLAYROOM.halfX+.28,nx))}
+      if(this.canOccupy(player,player.x,nz,occupancyJumpYFor(player.x,nz))){player.z=Math.max(-GIANT_PLAYROOM.halfZ-.28,Math.min(GIANT_PLAYROOM.halfZ+.28,nz))}
+      if(fan==='ACTIVE'){
+        const windX=player.x-1.05*dt
+        if(this.canOccupy(player,windX,player.z,occupancyJumpYFor(windX,player.z)))player.x=Math.max(-GIANT_PLAYROOM.halfX-.28,windX)
+      }
       const key=cellKey(worldToGrid(player))
       if(this.holes.has(key)&&player.jumpY<.12){player.falling=true;player.fallVelocity=0;player.jumpUntil=0;player.input={dx:0,dz:0,seq:player.input.seq};this.events.push({event:'PLAYER_FALLING',actorId:player.id,x:player.x,y:player.jumpY,z:player.z});continue}
       for(const item of this.items.values())if(Math.hypot(item.x-player.x,item.z-player.z)<=GAME_BALANCE.ITEM_PICKUP_RADIUS){this.collectItem(player,item);break}
@@ -190,11 +203,47 @@ export class Room{
   }
 
   private playAt(){return this.startedAt+GAME_BALANCE.COUNTDOWN_SECONDS*1000}
-  private canOccupy(player:PlayerState,x:number,z:number){
+  private jumpHeightAt(player:PlayerState,now:number,x: number=player.x,z: number=player.z){
+    const support=this.supportHeightAt(x,z)
+    if(now<player.jumpUntil){
+      const progress=Math.max(0,Math.min(1,(now-player.jumpStarted)/GAME_BALANCE.JUMP_DURATION_MS))
+      const airborneHeight=player.jumpBaseY+Math.sin(progress*Math.PI)*GAME_BALANCE.JUMP_HEIGHT
+      const reachedObstacleTop=player.jumpY>=support-.01||airborneHeight>=support-.01
+      return support>0&&reachedObstacleTop?Math.max(airborneHeight,support):airborneHeight
+    }
+    return support>0&&player.jumpY>=support-.01?support:player.jumpY
+  }
+  private canOccupy(player:PlayerState,x:number,z:number,jumpY:number=player.jumpY){
     const cell=worldToGrid({x,z})
     if(Math.abs(cell.x)>this.arena.halfX||Math.abs(cell.z)>this.arena.halfZ)return false
-    if(this.arena.walls.has(cellKey(cell))&&player.jumpY<GAME_BALANCE.OBSTACLE_TOP_Y-.12)return false
+    if(this.arena.walls.has(cellKey(cell))&&jumpY<GAME_BALANCE.OBSTACLE_TOP_Y-.01)return false
     return ![...this.players.values()].some(other=>other.id!==player.id&&!other.eliminated&&!other.falling&&Math.hypot(other.x-x,other.z-z)<GAME_BALANCE.PLAYER_RADIUS*2)
+  }
+  private moveCoreThroughObstacles(player:PlayerState,core:CoreState,direction:{x:number;z:number},steps:number){
+    let moved=false,x=core.x,z=core.z
+    for(let step=0;step<steps;step++){
+      const nextX=x+direction.x,nextZ=z+direction.z
+      if(Math.abs(nextX)>this.arena.halfX||Math.abs(nextZ)>this.arena.halfZ)break
+      if(this.coreAt(nextX,nextZ,core.id))break
+      if(this.arena.walls.has(cellKey({x:nextX,z:nextZ}))){
+        if(!this.destroyObstacle(player,nextX,nextZ))break
+        x=nextX;z=nextZ;moved=true
+        continue
+      }
+      x=nextX;z=nextZ;moved=true
+    }
+    if(!moved)return false
+    core.x=x;core.z=z;core.y=0
+    return true
+  }
+  private destroyObstacle(player:PlayerState,x:number,z:number){
+    const key=cellKey({x,z})
+    if(!this.arena.walls.has(key))return false
+    this.arena.walls.delete(key)
+    this.destroyedWalls.add(key)
+    this.events.push({event:'OBJECT_DESTROYED',actorId:player.id,x,z,team:player.team})
+    this.spawnItem(x,z)
+    return true
   }
   private supportHeightAt(x:number,z:number){return this.arena.walls.has(cellKey(worldToGrid({x,z})))?GAME_BALANCE.OBSTACLE_TOP_Y:0}
   private knockback(player:PlayerState,originX:number,originZ:number){
@@ -218,7 +267,7 @@ export class Room{
     for(let slot=0;slot<4;slot++){
       if([...this.players.values()].some(player=>player.slot===slot))continue
       const spawn=GIANT_PLAYROOM.spawnPoints[slot],team:Team=slot<2?'cyan':'coral',id=`bot-${++this.botId}`,yaw=team==='cyan'?Math.PI/2:-Math.PI/2
-      this.players.set(id,{id,name:names[slot],slot,bot:true,team,x:spawn.x,z:spawn.z,yaw,hits:0,bombCapacity:GAME_BALANCE.CORE_CAPACITY,canKick:false,canThrow:false,pierceCharges:0,jumpY:0,buildReady:0,falling:false,downedUntil:0,eliminated:false,lastInput:0,input:{dx:0,dz:0,seq:0},dashReady:0,nextAction:now+800+slot*350,jumpStarted:0,jumpUntil:0,jumpBaseY:0,fallVelocity:0})
+      this.players.set(id,{id,name:names[slot],slot,bot:true,team,x:spawn.x,z:spawn.z,yaw,hits:0,bombCapacity:GAME_BALANCE.CORE_CAPACITY,canKick:false,canThrow:false,pierceCharges:0,jumpY:0,jumpReady:0,buildReady:0,falling:false,downedUntil:0,eliminated:false,lastInput:0,input:{dx:0,dz:0,seq:0},dashReady:0,nextAction:now+800+slot*350,jumpStarted:0,jumpUntil:0,jumpBaseY:0,fallVelocity:0})
       this.events.push({event:'BOT_FILLED',actorId:id})
     }
   }
@@ -240,7 +289,12 @@ export class Room{
     if(core.piercing)for(const floorCell of piercingFloorCells(core,cells,GIANT_PLAYROOM.spawnPoints)){const key=cellKey(floorCell);this.arena.walls.delete(key);this.holes.add(key);this.events.push({event:'FLOOR_DESTROYED',x:floorCell.x,z:floorCell.z,team:core.team})}
     for(const player of this.players.values()){
       if(player.eliminated||player.falling||player.downedUntil||!cells.some(cell=>Math.abs(cell.x-player.x)<.62&&Math.abs(cell.z-player.z)<.62))continue
-      this.knockback(player,core.x,core.z);player.hits++;if(player.hits>=3)player.downedUntil=now+GAME_BALANCE.FLUX_DOWNED_MS;this.events.push({event:player.hits>=3?'PLAYER_FLUX_LOCKED':'PLAYER_HIT',actorId:core.owner,targetId:player.id})
+      this.knockback(player,core.x,core.z)
+      const beforeHits=player.hits
+      player.hits=Math.min(GAME_BALANCE.PLAYER_MAX_HITS,player.hits+GAME_BALANCE.CORE_HIT_DAMAGE)
+      const damage=player.hits-beforeHits
+      if(player.hits>=GAME_BALANCE.PLAYER_MAX_HITS)player.downedUntil=now+GAME_BALANCE.FLUX_DOWNED_MS
+      this.events.push({event:player.hits>=GAME_BALANCE.PLAYER_MAX_HITS?'PLAYER_FLUX_LOCKED':'PLAYER_HIT',actorId:core.owner,targetId:player.id,damage,hits:player.hits,remainingHits:GAME_BALANCE.PLAYER_MAX_HITS-player.hits,maxHits:GAME_BALANCE.PLAYER_MAX_HITS})
     }
     let chained=0
     for(const other of this.cores.values())if(keys.has(cellKey(other))){other.fuse=Math.min(other.fuse,.001);other.chain=Math.max(other.chain,core.chain+1);chained++}

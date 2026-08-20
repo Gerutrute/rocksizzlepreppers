@@ -873,6 +873,11 @@ footer small {
   font-size: 7px;
   font-weight: 900;
 }
+.health-hud b {
+  margin-left: 3px;
+  color: #d8deef;
+  font-size: 8px;
+}
 .health-hud svg {
   width: 20px;
   height: 20px;

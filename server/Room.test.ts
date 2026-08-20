@@ -20,7 +20,9 @@ describe('authoritative room',()=>{
     player.canKick=true;player.canThrow=true
     expect(room.action(player.id,'PLACE',{x:1,z:0},3000)).toBe(true)
     expect(room.action(player.id,'KICK',{x:1,z:0},3000)).toBe(true)
+    expect(player.yaw).toBeCloseTo(Math.PI/2)
     expect(room.action(player.id,'THROW',{x:0,z:-1},3000)).toBe(true)
+    expect(player.yaw).toBeCloseTo(Math.PI)
     expect([...room.cores.values()][0]).toMatchObject({x:-10,z:3})
     room.step(3,6000);expect(room.cores.size).toBe(0)
   })
@@ -135,6 +137,7 @@ describe('authoritative room',()=>{
   it('builds an obstacle and allows a jumping player to move over it',()=>{
     const room=new Room('JUMP',0),player=room.join('p1','Bloo',0)
     expect(room.action(player.id,'BUILD',{x:1,z:0},3000)).toBe(true)
+    expect(player.yaw).toBeCloseTo(Math.PI/2)
     expect(room.arena.walls.has('-10,6')).toBe(true)
     expect(room.action(player.id,'JUMP',{x:1,z:0},3000)).toBe(true)
     room.input(player.id,1,1,0);room.step(.3,3380)
@@ -144,6 +147,37 @@ describe('authoritative room',()=>{
     expect(player.jumpY).toBe(GAME_BALANCE.OBSTACLE_TOP_Y)
     expect(room.action(player.id,'PLACE',{x:1,z:0},3900)).toBe(true)
     expect([...room.cores.values()][0].y).toBe(GAME_BALANCE.OBSTACLE_TOP_Y)
+  })
+
+  it('blocks walking up an obstacle until the player actually jumps high enough',()=>{
+    const room=new Room('NO-AUTO-CLIMB',0),player=room.join('p1','Bloo',0)
+    expect(room.action(player.id,'BUILD',{x:1,z:0},3000)).toBe(true)
+    room.input(player.id,1,1,0)
+    for(let tick=1;tick<=12;tick++)room.step(1/30,3000+tick*34)
+    expect(player.x).toBeLessThan(-10.5)
+    expect(player.jumpY).toBe(0)
+
+    expect(room.action(player.id,'JUMP',{x:1,z:0},3500)).toBe(true)
+    for(let tick=1;tick<=8;tick++)room.step(1/30,3500+tick*34)
+    expect(player.x).toBeGreaterThan(-10.5)
+    expect(player.jumpY).toBeGreaterThanOrEqual(GAME_BALANCE.OBSTACLE_TOP_Y)
+  })
+
+  it('falls from an obstacle with gravity instead of snapping to the floor',()=>{
+    const room=new Room('LEDGE-GRAVITY',0),player=room.join('p1','Bloo',0)
+    room.arena.walls.add('0,0');player.x=.45;player.z=0;player.jumpY=GAME_BALANCE.OBSTACLE_TOP_Y
+    room.input(player.id,1,1,0);room.step(.1,3100)
+    expect(player.x).toBeGreaterThan(.5)
+    expect(player.jumpY).toBe(GAME_BALANCE.OBSTACLE_TOP_Y)
+
+    room.input(player.id,2,0,0);room.step(.1,3200)
+    expect(player.jumpY).toBeGreaterThan(0)
+    expect(player.jumpY).toBeLessThan(GAME_BALANCE.OBSTACLE_TOP_Y)
+    expect(player.falling).toBe(false)
+
+    for(let tick=1;tick<=5;tick++)room.step(.1,3200+tick*100)
+    expect(player.jumpY).toBe(0)
+    expect(player.eliminated).toBe(false)
   })
 
   it('enforces the obstacle build cooldown',()=>{

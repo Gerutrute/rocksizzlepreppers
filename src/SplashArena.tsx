@@ -14,6 +14,7 @@ import { NetworkClient, type NetworkSession } from './network/NetworkClient'
 import { AudioManager } from './audio/AudioManager'
 import { GameMusicPlaylist } from './audio/GameMusicPlaylist'
 import { createRippleModel, type RippleRig, type RippleVariant } from './three/RippleModel'
+import { poseRippleRig, RIPPLE_GESTURE_DURATION, rippleStepRate, type RippleGestureKind } from './three/RippleAnimator'
 
 const BLUE = '/assets/splash/ripple-blue-keyart-v2-web.png'
 const RED = '/assets/splash/ripple-red-keyart-v2-web.png'
@@ -29,17 +30,17 @@ const ARENA_X = HALF_X*2+1, ARENA_Z = HALF_Z*2+1
 const WALLS = GIANT_PLAYROOM.walls
 
 type Team = 'cyan'|'coral'
-type Actor = { id:string; name:string; team:Team; isPlayer:boolean; networkId?:string; model:THREE.Group; rig:RippleRig; materials:THREE.MeshStandardMaterial[]; shadow:THREE.Mesh; rescueRing:THREE.Mesh; baseScale:number; x:number; z:number; serverX:number; serverZ:number; renderX:number; renderZ:number; targetX:number; targetZ:number; lastRenderX:number; lastRenderZ:number; walkPhase:number; walkBlend:number; yaw:number; targetYaw:number; hits:number; bombCapacity:number; canKick:boolean; canThrow:boolean; pierceCharges:number; jumpY:number; jumpStarted:number; jumpUntil:number; jumpBaseY:number; buildReady:number; falling:boolean; fallVelocity:number; lockedUntil:number; downedUntil:number; eliminated:boolean; dashReady:number }
+type Actor = { id:string; name:string; team:Team; isPlayer:boolean; networkId?:string; model:THREE.Group; rig:RippleRig; materials:THREE.MeshStandardMaterial[]; shadow:THREE.Mesh; rescueRing:THREE.Mesh; baseScale:number; x:number; z:number; serverX:number; serverZ:number; renderX:number; renderZ:number; targetX:number; targetZ:number; lastRenderX:number; lastRenderZ:number; walkPhase:number; walkBlend:number; wasAirborne:boolean; landingBlend:number; gesture:RippleGestureKind|null; gestureStarted:number; yaw:number; targetYaw:number; hits:number; bombCapacity:number; canKick:boolean; canThrow:boolean; pierceCharges:number; jumpY:number; jumpReady:number; jumpStarted:number; jumpUntil:number; jumpBaseY:number; buildReady:number; falling:boolean; fallVelocity:number; lockedUntil:number; downedUntil:number; eliminated:boolean; dashReady:number }
 type Flight = { fromX:number; fromY:number; fromZ:number; toX:number; toY:number; toZ:number; start:number; duration:number }
 type Core = { id:number; networkId?:string; group:THREE.Group; x:number; y:number; z:number; fuse:number; owner:string; team:Team; piercing:boolean; ring:THREE.Mesh; flight?:Flight }
 type ItemView={id:string;kind:ItemKind;x:number;z:number;group:THREE.Group}
 type Burst = { group:THREE.Group; born:number; material:THREE.MeshStandardMaterial; pulses:THREE.InstancedMesh; ribbons:THREE.InstancedMesh; rings:THREE.InstancedMesh; shards:THREE.InstancedMesh; shock:THREE.Mesh; light:THREE.PointLight; cells:Array<{x:number;z:number}>; active:boolean }
 type Debris = {mesh:THREE.Mesh;velocity:THREE.Vector3;spin:THREE.Vector3;born:number}
 type ParticleExplosion = {system:ParticleSystem;born:number}
-type UiState = { time:number; countdown:number; localTeam:Team; playerHits:number; health:number; botHits:number; allyHits:number; rival2Hits:number; alliesAlive:number; rivalsAlive:number; onlineHumans:number; cores:number; capacity:number; canKick:boolean; canThrow:boolean; pierceCharges:number; chain:number; dash:number; build:number; fan:'CALM'|'WARNING'|'ACTIVE'; vehicle:boolean; fps:number;frameMs:number;drawCalls:number;triangles:number;textures:number;simBodies:number;rtt:number;packetRate:number;pendingInputs:number;serverPos:string;clientPos:string;message:string }
+type UiState = { time:number; countdown:number; localTeam:Team; playerHits:number; health:number; maxHealth:number; jump:number; botHits:number; allyHits:number; rival2Hits:number; alliesAlive:number; rivalsAlive:number; onlineHumans:number; cores:number; capacity:number; canKick:boolean; canThrow:boolean; pierceCharges:number; chain:number; dash:number; build:number; fan:'CALM'|'WARNING'|'ACTIVE'; vehicle:boolean; fps:number;frameMs:number;drawCalls:number;triangles:number;textures:number;simBodies:number;rtt:number;packetRate:number;pendingInputs:number;serverPos:string;clientPos:string;message:string }
 
 const lerpAngle=(from:number,to:number,alpha:number)=>from+Math.atan2(Math.sin(to-from),Math.cos(to-from))*alpha
-const initialUi=():UiState=>({time:GAME_BALANCE.MATCH_SECONDS,countdown:3,localTeam:'cyan',playerHits:0,health:3,botHits:0,allyHits:0,rival2Hits:0,alliesAlive:2,rivalsAlive:2,onlineHumans:0,cores:1,capacity:1,canKick:false,canThrow:false,pierceCharges:0,chain:0,dash:1,build:1,fan:'CALM',vehicle:false,fps:0,frameMs:0,drawCalls:0,triangles:0,textures:0,simBodies:4,rtt:0,packetRate:0,pendingInputs:0,serverPos:'0.00,0.00',clientPos:'0.00,0.00',message:'READY · 시작 신호를 기다리세요'})
+const initialUi=():UiState=>({time:GAME_BALANCE.MATCH_SECONDS,countdown:3,localTeam:'cyan',playerHits:0,health:GAME_BALANCE.PLAYER_MAX_HITS,maxHealth:GAME_BALANCE.PLAYER_MAX_HITS,jump:1,botHits:0,allyHits:0,rival2Hits:0,alliesAlive:2,rivalsAlive:2,onlineHumans:0,cores:1,capacity:1,canKick:false,canThrow:false,pierceCharges:0,chain:0,dash:1,build:1,fan:'CALM',vehicle:false,fps:0,frameMs:0,drawCalls:0,triangles:0,textures:0,simBodies:4,rtt:0,packetRate:0,pendingInputs:0,serverPos:'0.00,0.00',clientPos:'0.00,0.00',message:'READY · 시작 신호를 기다리세요'})
 
 function Mark(){ return <span className="splash-mark"><i/><i/><b/></span> }
 export default function SplashArena({onExit,networkSession}:{onExit:()=>void;networkSession?:NetworkSession}){
@@ -225,7 +226,7 @@ export default function SplashArena({onExit,networkSession}:{onExit:()=>void;net
       const shadow=new THREE.Mesh(shadowGeo,shadowMat);shadow.rotation.x=-Math.PI/2;shadow.position.set(x,.025,z);scene.add(shadow)
       const rescueRing=new THREE.Mesh(new THREE.TorusGeometry(.56,.055,10,32),new THREE.MeshBasicMaterial({color:team==='cyan'?'#68efff':'#ff7884',transparent:true,opacity:.85,depthWrite:false,toneMapped:false}))
       rescueRing.rotation.x=-Math.PI/2;rescueRing.position.set(x,.12,z);rescueRing.visible=false;scene.add(rescueRing)
-      return{id,name,team,isPlayer,model,rig,materials,shadow,rescueRing,baseScale:model.scale.x,x,z,serverX:x,serverZ:z,renderX:x,renderZ:z,targetX:x,targetZ:z,lastRenderX:x,lastRenderZ:z,walkPhase:0,walkBlend:0,yaw,targetYaw:yaw,hits:0,bombCapacity:GAME_BALANCE.CORE_CAPACITY,canKick:false,canThrow:false,pierceCharges:0,jumpY:0,jumpStarted:0,jumpUntil:0,jumpBaseY:0,buildReady:0,falling:false,fallVelocity:0,lockedUntil:0,downedUntil:0,eliminated:false,dashReady:0}
+       return{id,name,team,isPlayer,model,rig,materials,shadow,rescueRing,baseScale:model.scale.x,x,z,serverX:x,serverZ:z,renderX:x,renderZ:z,targetX:x,targetZ:z,lastRenderX:x,lastRenderZ:z,walkPhase:0,walkBlend:0,wasAirborne:false,landingBlend:0,gesture:null,gestureStarted:0,yaw,targetYaw:yaw,hits:0,bombCapacity:GAME_BALANCE.CORE_CAPACITY,canKick:false,canThrow:false,pierceCharges:0,jumpY:0,jumpReady:0,jumpStarted:0,jumpUntil:0,jumpBaseY:0,buildReady:0,falling:false,fallVelocity:0,lockedUntil:0,downedUntil:0,eliminated:false,dashReady:0}
     }
     const [spawnBloo,spawnLumi,spawnCoral,spawnVio]=GIANT_PLAYROOM.spawnPoints
     const player=createActor('bloo','BLOO','cyan',true,'bloo',spawnBloo.x,spawnBloo.z,1.04)
@@ -240,7 +241,7 @@ export default function SplashArena({onExit,networkSession}:{onExit:()=>void;net
     const serverGhost=new THREE.Mesh(new THREE.RingGeometry(.48,.54,32),new THREE.MeshBasicMaterial({color:'#fff59b',transparent:true,opacity:.9,depthTest:false,toneMapped:false}))
     serverGhost.rotation.x=-Math.PI/2;serverGhost.position.y=.065;serverGhost.visible=false;serverGhost.renderOrder=10;scene.add(serverGhost)
     const debugPaths=bots.map(()=>{const positions=new Float32Array(6),geometry=new THREE.BufferGeometry();geometry.setAttribute('position',new THREE.BufferAttribute(positions,3));const line=new THREE.Line(geometry,new THREE.LineBasicMaterial({color:'#c697ff',transparent:true,opacity:.7,depthTest:false}));line.visible=debug;line.renderOrder=8;scene.add(line);return{line,positions,geometry}})
-    let controlled=player,cameraYaw=player.yaw,localNetworkId='',inputSequence=0,networkRemaining:number=GAME_BALANCE.MATCH_SECONDS,networkCountdown:number=GAME_BALANCE.COUNTDOWN_SECONDS,networkHumanCount=0
+    let controlled=player,cameraTarget=player,cameraYaw=player.yaw,localNetworkId='',inputSequence=0,networkRemaining:number=GAME_BALANCE.MATCH_SECONDS,networkCountdown:number=GAME_BALANCE.COUNTDOWN_SECONDS,networkHumanCount=0
     let pendingInputs:Array<{seq:number;dx:number;dz:number;dt:number}>=[]
     const networkClient=networkSession?new NetworkClient():null
     networkClientRef.current=networkClient
@@ -287,6 +288,30 @@ export default function SplashArena({onExit,networkSession}:{onExit:()=>void;net
     let fanState:'CALM'|'WARNING'|'ACTIVE'='CALM',vehicleActive=false,vehicleX=-9,lastVehicleCell=-99
     let facing={x:1,z:0},aiming=false
     const say=(message:string)=>setUi(v=>({...v,message}))
+    const triggerGesture=(actor:Actor,gesture:RippleGestureKind,now=performance.now())=>{actor.gesture=gesture;actor.gestureStarted=now}
+    const faceDirection=(actor:Actor,dx:number,dz:number)=>{if(Math.hypot(dx,dz)>.01)actor.targetYaw=Math.atan2(dx,dz)}
+    const canLocalControl=()=>!controlled.eliminated&&!controlled.falling&&!controlled.downedUntil
+    const keepCameraOnTarget=()=>{
+      if(!controlled.eliminated){
+        if(cameraTarget!==controlled)cameraTarget=controlled
+        return
+      }
+      const candidates=actors.filter(actor=>actor.id!==controlled.id)
+      if(candidates.length===0){cameraTarget=controlled;return}
+      if(!cameraTarget||cameraTarget.eliminated||cameraTarget===controlled||!candidates.includes(cameraTarget))cameraTarget=candidates[0]
+    }
+    const cycleCameraTarget=(step:number)=>{
+      if(!controlled.eliminated)return
+      const candidates=actors.filter(actor=>actor.id!==controlled.id)
+      if(!candidates.length){say('추적 가능한 다른 플레이어가 없습니다');return}
+      if(!cameraTarget||cameraTarget.eliminated||cameraTarget===controlled||!candidates.includes(cameraTarget))cameraTarget=candidates[0]
+      const index=candidates.indexOf(cameraTarget)
+      const next=candidates[(index+step+candidates.length)%candidates.length]
+      if(next===cameraTarget)return
+      cameraTarget=next
+      cameraYaw=next.yaw
+      say(`카메라 추적 대상: ${next.name}`)
+    }
     const setActorDownedVisual=(actor:Actor,downed:boolean)=>{actor.materials.forEach(material=>{material.opacity=downed ? .46 : 1;material.depthWrite=!downed});actor.model.scale.setScalar(actor.baseScale*(downed ? .72 : 1))}
 
     const addCoreView=(owner:string,team:Team,gx:number,gz:number,fuse:number,networkId?:string,piercing=false,y=0)=>{
@@ -302,12 +327,24 @@ export default function SplashArena({onExit,networkSession}:{onExit:()=>void;net
       const key=`${gx},${gz}`,onObstacle=arenaState.walls.has(key)&&Math.abs(actor.jumpY-GAME_BALANCE.OBSTACLE_TOP_Y)<.18
       if(actor.eliminated||actor.falling||actor.downedUntil||(blocked(gx,gz)&&!onObstacle)||holes.has(key)||cores.some(c=>c.x===gx&&c.z===gz)||!canPlaceCore(cores.filter(c=>c.owner===actor.id).length,actor.bombCapacity))return false
       const piercing=actor.pierceCharges>0;if(piercing)actor.pierceCharges--
-      return addCoreView(actor.id,actor.team,gx,gz,fuse,undefined,piercing,onObstacle?GAME_BALANCE.OBSTACLE_TOP_Y:0)
+      const placed=addCoreView(actor.id,actor.team,gx,gz,fuse,undefined,piercing,onObstacle?GAME_BALANCE.OBSTACLE_TOP_Y:0)
+      if(placed)triggerGesture(actor,'place')
+      return placed
     }
     const rayCells=(core:Core)=>core.piercing?tracePiercingExplosion(arenaState,{x:core.x,z:core.z},GAME_BALANCE.CORE_RANGE):traceExplosion(arenaState,{x:core.x,z:core.z},GAME_BALANCE.CORE_RANGE)
-    const actorCanOccupy=(actor:Actor,x:number,z:number)=>{
+  const actorJumpHeightAt=(actor:Actor,sampleNow:number,x: number=actor.x,z: number=actor.z)=>{
+    const support=arenaState.walls.has(`${Math.round(x)},${Math.round(z)}`)?GAME_BALANCE.OBSTACLE_TOP_Y:0
+    if(sampleNow<actor.jumpUntil){
+      const progress=Math.max(0,Math.min(1,(sampleNow-actor.jumpStarted)/GAME_BALANCE.JUMP_DURATION_MS))
+      const airborneHeight=actor.jumpBaseY+Math.sin(progress*Math.PI)*GAME_BALANCE.JUMP_HEIGHT
+      const reachedObstacleTop=actor.jumpY>=support-.01||airborneHeight>=support-.01
+      return support>0&&reachedObstacleTop?Math.max(airborneHeight,support):airborneHeight
+    }
+    return support>0&&actor.jumpY>=support-.01?support:actor.jumpY
+  }
+    const actorCanOccupy=(actor:Actor,x:number,z:number,jumpY:number=actor.jumpY)=>{
       const gx=Math.round(x),gz=Math.round(z)
-      if(Math.abs(gx)>HALF_X||Math.abs(gz)>HALF_Z||((arenaState.walls.has(`${gx},${gz}`))&&actor.jumpY<GAME_BALANCE.OBSTACLE_TOP_Y-.12))return false
+      if(Math.abs(gx)>HALF_X||Math.abs(gz)>HALF_Z||((arenaState.walls.has(`${gx},${gz}`))&&jumpY<GAME_BALANCE.OBSTACLE_TOP_Y-.01))return false
       return !actors.some(other=>other!==actor&&!other.eliminated&&!other.falling&&Math.hypot(other.x-x,other.z-z)<GAME_BALANCE.PLAYER_RADIUS*2)
     }
     const knockActor=(actor:Actor,originX:number,originZ:number)=>{
@@ -316,21 +353,30 @@ export default function SplashArena({onExit,networkSession}:{onExit:()=>void;net
       if(length<.05){const slot=actors.indexOf(actor);dx=slot%2?-1:1;dz=slot<2?-1:1;length=Math.hypot(dx,dz)}
       dx/=length;dz/=length
       const step=GAME_BALANCE.KNOCKBACK_DISTANCE/8
-      for(let index=0;index<8;index++){const nx=actor.x+dx*step,nz=actor.z+dz*step;if(!actorCanOccupy(actor,nx,nz))break;actor.x=nx;actor.z=nz}
+      for(let index=0;index<8;index++){
+        const nx=actor.x+dx*step,nz=actor.z+dz*step
+        const jumpY=actorJumpHeightAt(actor,performance.now(),nx,nz)
+        if(!actorCanOccupy(actor,nx,nz,jumpY))break
+        actor.x=nx;actor.z=nz
+      }
       actor.targetX=actor.x;actor.targetZ=actor.z
     }
     const hit=(actor:Actor,cells:{x:number;z:number}[],now:number,originX:number,originZ:number)=>{
       if(actor.eliminated||actor.falling||actor.downedUntil||now<actor.lockedUntil)return
       if(cells.some(cell=>Math.abs(cell.x-actor.x)<.62&&Math.abs(cell.z-actor.z)<.62)){
-        knockActor(actor,originX,originZ);actor.hits++;shake=Math.max(shake,.42)
-        if(actor.hits>=3){
+        knockActor(actor,originX,originZ);triggerGesture(actor,'hit',now);shake=Math.max(shake,.42)
+        actor.hits=Math.min(GAME_BALANCE.PLAYER_MAX_HITS,actor.hits+1)
+        if(actor===controlled)audio.hurt()
+        if(actor.hits>=GAME_BALANCE.PLAYER_MAX_HITS){
           actor.downedUntil=now+GAME_BALANCE.FLUX_DOWNED_MS;actor.lockedUntil=actor.downedUntil
           setActorDownedVisual(actor,true)
           actor.rescueRing.visible=true
           say(`${actor.name} FLUX LOCKED — 아군이 R로 6초 안에 구조할 수 있습니다`)
+          if(actor===controlled)audio.fluxLocked()
         }else{
           actor.lockedUntil=now+GAME_BALANCE.FLUX_SLOW_MS
-          say(actor===controlled?'FLUX LOCK! 이동 출력이 저하됩니다':`${actor.name}의 이동 출력이 저하됩니다`)
+          const remaining=Math.max(0,GAME_BALANCE.PLAYER_MAX_HITS-actor.hits)
+          say(actor===controlled?`HIT! 남은 HP ${remaining}/${GAME_BALANCE.PLAYER_MAX_HITS}`:`${actor.name}에게 폭발 피해 (${remaining} 남음)`)
         }
       }
     }
@@ -338,11 +384,12 @@ export default function SplashArena({onExit,networkSession}:{onExit:()=>void;net
       if(rescuer.eliminated||rescuer.falling||rescuer.downedUntil||target.eliminated||target.falling||!target.downedUntil||rescuer.team!==target.team)return false
       if(Math.hypot(rescuer.x-target.x,rescuer.z-target.z)>1.45)return false
       target.hits=2;target.downedUntil=0;target.lockedUntil=now+650;setActorDownedVisual(target,false);target.rescueRing.visible=false
-      say(`${rescuer.name} → ${target.name} RESCUE! 팀이 전장에 복귀했습니다`);audio.rescue();shake=Math.max(shake,.2);return true
+      triggerGesture(rescuer,'rescue',now);say(`${rescuer.name} → ${target.name} RESCUE! 팀이 전장에 복귀했습니다`);audio.rescue();shake=Math.max(shake,.2);return true
     }
     const eliminate=(actor:Actor)=>{
       actor.eliminated=true;actor.falling=false;actor.downedUntil=0;actor.model.visible=false;actor.shadow.visible=false;actor.rescueRing.visible=false
       say(`${actor.name} ELIMINATED`)
+      if(actor===controlled){keys.clear();keepCameraOnTarget()}
       const cyanAlive=actors.filter(item=>item.team==='cyan'&&!item.eliminated).length
       const coralAlive=actors.filter(item=>item.team==='coral'&&!item.eliminated).length
       if(!ended&&(!cyanAlive||!coralAlive)){ended=true;setResult(cyanAlive?'win':'lose')}
@@ -378,24 +425,30 @@ export default function SplashArena({onExit,networkSession}:{onExit:()=>void;net
       if(chained){chainBest=Math.max(chainBest,chain+chained);say(`CHAIN ×${chain+chained}! 에너지 경로가 연결됐습니다`)}
       scene.remove(core.group);const index=cores.indexOf(core);if(index>=0)cores.splice(index,1)
     }
-    const move=(actor:Actor,dx:number,dz:number,speed:number,dt:number,faceMovement=true)=>{
+    const move=(actor:Actor,dx:number,dz:number,speed:number,dt:number,faceMovement=true,jumpSampleNow: number=performance.now())=>{
       if(actor.eliminated||actor.falling||actor.downedUntil)return
       const output=performance.now()<actor.lockedUntil ? .42 : 1
       const nx=actor.x+dx*speed*output*dt,nz=actor.z+dz*speed*output*dt
-      if(actorCanOccupy(actor,nx,actor.z))actor.x=THREE.MathUtils.clamp(nx,-HALF_X-.28,HALF_X+.28)
-      if(actorCanOccupy(actor,actor.x,nz))actor.z=THREE.MathUtils.clamp(nz,-HALF_Z-.28,HALF_Z+.28)
+      const jumpAt=(x:number,z:number)=>actorJumpHeightAt(actor,jumpSampleNow,x,z)
+      const occupiedX=jumpAt(nx,actor.z),occupiedZ=jumpAt(actor.x,nz)
+      if(actorCanOccupy(actor,nx,actor.z,occupiedX))actor.x=THREE.MathUtils.clamp(nx,-HALF_X-.28,HALF_X+.28)
+      if(actorCanOccupy(actor,actor.x,nz,occupiedZ))actor.z=THREE.MathUtils.clamp(nz,-HALF_Z-.28,HALF_Z+.28)
       if(faceMovement&&(dx||dz))actor.targetYaw=Math.atan2(dx,dz)
       actor.shadow.position.set(actor.x,.025,actor.z)
       actor.targetX=actor.x;actor.targetZ=actor.z
     }
     const dash=()=>{
-      if(controlled.falling)return
+      if(!canLocalControl())return
       if(networkClient){networkClient.send({type:'ACTION',seq:++inputSequence,action:'DASH',direction:cardinalDirection()});audio.dash();say('RIPPLE DASH · SERVER VALIDATING');return}
       const now=performance.now();if(now<controlled.dashReady||now<controlled.lockedUntil)return
-      controlled.dashReady=now+GAME_BALANCE.DASH_COOLDOWN_MS
       const dashSteps=12,dashStep=GAME_BALANCE.DASH_DISTANCE/dashSteps
-      for(let i=0;i<dashSteps;i++){const nx=controlled.x+facing.x*dashStep,nz=controlled.z+facing.z*dashStep;if(!actorCanOccupy(controlled,nx,nz))break;controlled.x=nx;controlled.z=nz}
-      audio.dash();shake=.13;say('RIPPLE DASH!')
+      controlled.dashReady=now+GAME_BALANCE.DASH_COOLDOWN_MS
+      for(let i=0;i<dashSteps;i++){
+        const nx=controlled.x+facing.x*dashStep,nz=controlled.z+facing.z*dashStep
+        if(!actorCanOccupy(controlled,nx,nz,actorJumpHeightAt(controlled,now,nx,nz)))break
+        controlled.x=nx;controlled.z=nz
+      }
+      triggerGesture(controlled,'dash',now);audio.dash();shake=.13;say('RIPPLE DASH!')
     }
     const cardinalDirection=()=>Math.abs(facing.x)>=Math.abs(facing.z)?{x:facing.x||1,z:0}:{x:0,z:facing.z||1}
     const getThrowPlan=()=>{
@@ -411,43 +464,51 @@ export default function SplashArena({onExit,networkSession}:{onExit:()=>void;net
       return toX===fromX&&toZ===fromZ?null:{core:nearest.core,fromX,fromZ,toX,toZ}
     }
     const kick=()=>{
-      if(controlled.falling)return
+      if(!canLocalControl())return
       if(!controlled.canKick){say('밀기 아이템을 먼저 획득하세요');return}
       if(networkClient){networkClient.send({type:'ACTION',seq:++inputSequence,action:'KICK',direction:cardinalDirection()});audio.kick();say('CORE KICK · SERVER VALIDATING');return}
       const nearest=cores.filter(core=>!core.flight).map(core=>({core,distance:Math.hypot(core.x-controlled.x,core.z-controlled.z)})).sort((a,b)=>a.distance-b.distance)[0]
       if(!nearest||nearest.distance>1.55){say('가까운 Core가 없습니다');return}
       const direction=cardinalDirection(),nx=nearest.core.x+direction.x,nz=nearest.core.z+direction.z
-      if(!blocked(nx,nz)&&!cores.some(core=>core!==nearest.core&&core.x===nx&&core.z===nz)){nearest.core.x=nx;nearest.core.y=0;nearest.core.z=nz;nearest.core.group.position.set(nx,0,nz);audio.kick();say('Core를 밀어 경로를 바꿨습니다!')}
+      if(!blocked(nx,nz)&&!cores.some(core=>core!==nearest.core&&core.x===nx&&core.z===nz)){nearest.core.x=nx;nearest.core.y=0;nearest.core.z=nz;nearest.core.group.position.set(nx,0,nz);faceDirection(controlled,direction.x,direction.z);triggerGesture(controlled,'kick');audio.kick();say('Core를 밀어 경로를 바꿨습니다!')}
     }
     const throwCore=()=>{
-      if(controlled.falling)return
+      if(!canLocalControl())return
       if(!controlled.canThrow){say('던지기 아이템을 먼저 획득하세요');return}
       const plan=getThrowPlan()
       if(!plan){say('던질 수 있는 가까운 Core 또는 착지 경로가 없습니다');return}
       if(networkClient){networkClient.send({type:'ACTION',seq:++inputSequence,action:'THROW',direction:cardinalDirection()});audio.throwCore();say('CORE THROW · SERVER VALIDATING');return}
       const fromY=plan.core.y;plan.core.x=plan.toX;plan.core.y=0;plan.core.z=plan.toZ;plan.core.ring.visible=false
       plan.core.flight={fromX:plan.fromX,fromY,fromZ:plan.fromZ,toX:plan.toX,toY:0,toZ:plan.toZ,start:performance.now(),duration:GAME_BALANCE.THROW_DURATION_MS}
-      audio.throwCore();shake=.09;say('CORE THROW! 착지 지점에서 파동 경로를 다시 계산합니다')
+      faceDirection(controlled,plan.toX-plan.fromX,plan.toZ-plan.fromZ);triggerGesture(controlled,'throw');audio.throwCore();shake=.09;say('CORE THROW! 착지 지점에서 파동 경로를 다시 계산합니다')
     }
     const rescueAlly=()=>{
-      if(controlled.falling)return
+      if(!canLocalControl())return
       if(networkClient){networkClient.send({type:'ACTION',seq:++inputSequence,action:'RESCUE',direction:cardinalDirection()});say('RESCUE · SERVER VALIDATING');return}
       const target=actors.filter(actor=>actor.team===controlled.team&&actor!==controlled&&actor.downedUntil&&!actor.eliminated).sort((a,b)=>Math.hypot(a.x-controlled.x,a.z-controlled.z)-Math.hypot(b.x-controlled.x,b.z-controlled.z))[0]
-      if(!target||!rescue(controlled,target,performance.now()))say('구조할 수 있는 아군에게 더 가까이 가세요')
+      if(!target||!rescue(controlled,target,performance.now()))say('구조할 수 있는 아군에게 더 가까이 가세요');else faceDirection(controlled,target.x-controlled.x,target.z-controlled.z)
     }
     const jump=()=>{
-      if(controlled.falling)return
-      if(networkClient){networkClient.send({type:'ACTION',seq:++inputSequence,action:'JUMP',direction:cardinalDirection()});return}
-      const now=performance.now();if(now<controlled.jumpUntil)return
-      controlled.jumpBaseY=controlled.jumpY;controlled.jumpStarted=now;controlled.jumpUntil=now+GAME_BALANCE.JUMP_DURATION_MS;say('JUMP! 장애물과 구멍을 뛰어넘으세요')
+      if(!canLocalControl())return
+      if(networkClient){
+        const now=performance.now()
+        if(now<controlled.jumpUntil||now<controlled.jumpReady){audio.cooldown();say(`점프 쿨타임입니다 (${Math.ceil((controlled.jumpReady-now)/1000)}초)`);return}
+        networkClient.send({type:'ACTION',seq:++inputSequence,action:'JUMP',direction:cardinalDirection()})
+        audio.jump()
+        return
+      }
+      const now=performance.now()
+      if(now<controlled.jumpUntil||now<controlled.jumpReady){audio.cooldown();say(`점프 쿨타임입니다 (${Math.ceil((controlled.jumpReady-now)/1000)}초)`);return}
+      controlled.jumpBaseY=controlled.jumpY;controlled.jumpStarted=now;controlled.jumpUntil=now+GAME_BALANCE.JUMP_DURATION_MS;controlled.jumpReady=now+GAME_BALANCE.JUMP_COOLDOWN_MS;controlled.fallVelocity=0;say('JUMP! 장애물과 구멍을 뛰어넘으세요')
+      audio.jump()
     }
     const buildWall=()=>{
       const now=performance.now();if(now<controlled.buildReady)return
-      if(controlled.falling)return
+      if(!canLocalControl())return
       if(networkClient){controlled.buildReady=now+GAME_BALANCE.BUILD_COOLDOWN_MS;networkClient.send({type:'ACTION',seq:++inputSequence,action:'BUILD',direction:cardinalDirection()});say('BLOCK BUILD · SERVER VALIDATING');return}
       const direction=cardinalDirection(),cell=worldToGrid({x:controlled.x+direction.x*1.05,z:controlled.z+direction.z*1.05}),key=`${cell.x},${cell.z}`
       if(Math.abs(cell.x)>HALF_X||Math.abs(cell.z)>HALF_Z||arenaState.walls.has(key)||holes.has(key)||cores.some(core=>core.x===cell.x&&core.z===cell.z)||actors.some(actor=>!actor.eliminated&&Math.hypot(actor.x-cell.x,actor.z-cell.z)<.72)){say('그 위치에는 장애물을 설치할 수 없습니다');return}
-      arenaState.walls.add(key);createWallView(key,wallViews.size);controlled.buildReady=now+GAME_BALANCE.BUILD_COOLDOWN_MS;say('BLOCK BUILD! 방어 경로를 만들었습니다')
+      arenaState.walls.add(key);createWallView(key,wallViews.size);controlled.buildReady=now+GAME_BALANCE.BUILD_COOLDOWN_MS;faceDirection(controlled,direction.x,direction.z);triggerGesture(controlled,'build',now);say('BLOCK BUILD! 방어 경로를 만들었습니다')
     }
     const syncNetworkSnapshot=(snapshot:RoomSnapshot)=>{
       networkRemaining=snapshot.remaining;networkCountdown=snapshot.countdown;elapsed=GAME_BALANCE.MATCH_SECONDS-snapshot.remaining;fanState=snapshot.fan;vehicleActive=snapshot.vehicle.active;vehicleX=snapshot.vehicle.x;networkHumanCount=snapshot.players.filter(state=>!state.bot).length
@@ -462,11 +523,14 @@ export default function SplashArena({onExit,networkSession}:{onExit:()=>void;net
         const actor=actors[state.slot];if(!actor)return
         actor.targetYaw=state.yaw
         const falling=state.falling??false
-        actor.networkId=state.id;actor.x=state.x;actor.z=state.z;actor.serverX=state.x;actor.serverZ=state.z;actor.targetX=state.x;actor.targetZ=state.z;actor.hits=state.hits;actor.bombCapacity=state.bombCapacity;actor.canKick=state.canKick;actor.canThrow=state.canThrow;actor.pierceCharges=state.pierceCharges;actor.jumpY=state.jumpY;actor.buildReady=sampleNow+Math.max(0,(state.buildReady??0)-snapshot.serverTime);actor.falling=falling;actor.downedUntil=state.downedUntil;actor.eliminated=state.eliminated
+        actor.networkId=state.id;actor.x=state.x;actor.z=state.z;actor.serverX=state.x;actor.serverZ=state.z;actor.targetX=state.x;actor.targetZ=state.z;actor.hits=state.hits;actor.bombCapacity=state.bombCapacity;actor.canKick=state.canKick;actor.canThrow=state.canThrow;actor.pierceCharges=state.pierceCharges;actor.jumpY=state.jumpY;actor.buildReady=sampleNow+Math.max(0,(state.buildReady??0)-snapshot.serverTime);actor.jumpReady=sampleNow+Math.max(0,(state.jumpReady??0)-snapshot.serverTime);actor.falling=falling;actor.downedUntil=state.downedUntil;actor.eliminated=state.eliminated
         actor.model.visible=!state.eliminated;actor.shadow.visible=!state.eliminated&&!falling;actor.rescueRing.visible=!!state.downedUntil&&!state.eliminated&&!falling;setActorDownedVisual(actor,!!state.downedUntil)
         if(state.id===localNetworkId){
+          const wasAlive=!controlled.eliminated
           controlled=actor;pendingInputs=pendingInputs.filter(input=>input.seq>state.lastInput)
-          pendingInputs.forEach(input=>move(actor,input.dx,input.dz,GAME_BALANCE.PLAYER_SPEED,input.dt));actor.targetX=actor.x;actor.targetZ=actor.z
+          pendingInputs.forEach(input=>move(actor,input.dx,input.dz,GAME_BALANCE.PLAYER_SPEED,input.dt,false,performance.now()+input.dt*1000*0.5));actor.targetX=actor.x;actor.targetZ=actor.z
+          if(wasAlive&&state.eliminated){keys.clear()}
+          keepCameraOnTarget()
         }
       })
       const serverCoreIds=new Set(snapshot.cores.map(core=>core.id))
@@ -486,18 +550,39 @@ export default function SplashArena({onExit,networkSession}:{onExit:()=>void;net
     const onNetworkMessage=(message:ServerMessage)=>{
       if(message.type==='WELCOME'){
         localNetworkId=message.playerId;controlled=actors[message.slot];cameraYaw=controlled.yaw;facing={x:Math.sin(cameraYaw),z:Math.cos(cameraYaw)};actors.forEach(actor=>actor.isPlayer=false);controlled.isPlayer=true
+        cameraTarget=controlled
         say(`ROOM ${message.roomId} · SLOT ${message.slot+1} · SERVER CONNECTED`)
       }
       if(message.type==='SNAPSHOT')syncNetworkSnapshot(message.snapshot)
       if(message.type==='ERROR')say(`NETWORK ERROR · ${message.message}`)
       if(message.type==='GAME_EVENT'){
         const labels:Record<string,string>={PLAYER_RESCUED:'TEAM RESCUE!',PLAYER_FLUX_LOCKED:'FLUX LOCKED!',PLAYER_ELIMINATED:'RIPPLE ELIMINATED',PLAYER_FALLING:'VOID FALL · 추락 중!',PLAYER_FELL:'VOID FALL · 탈락!',PLAYER_JUMPED:'JUMP!',PLAYER_KNOCKED:'IMPACT KNOCKBACK',CORE_THROWN:'SERVER CORE THROW',CORE_KICKED:'SERVER CORE KICK',CORE_EXPLODED:'3D SPLASH DISCHARGE · SERVER SYNC',OBJECT_DESTROYED:'BLOCK SHATTERED · 아이템을 확인하세요',FLOOR_DESTROYED:'PIERCE SPLASH · 바닥 붕괴!',WALL_BUILT:'BLOCK BUILD!',ITEM_COLLECTED:`${message.kind??'POWER'} ITEM 획득!`,VEHICLE_CORE_PUSH:'TOY EXPRESS MOVED A CORE',VEHICLE_PLAYER_PUSH:'TOY EXPRESS IMPACT!',MATCH_RESTARTED:'READY · ROOM REMATCH',MATCH_STARTED:'SPLASH! 예측하고, 연결하고, 탈출하세요'}
+        if(message.event==='PLAYER_HIT'||message.event==='PLAYER_FLUX_LOCKED'){
+          const maxHealth=message.maxHits??GAME_BALANCE.PLAYER_MAX_HITS
+          const remaining=message.remainingHits??Math.max(0,maxHealth-(message.hits??GAME_BALANCE.PLAYER_MAX_HITS))
+          const damage=message.damage??0
+          const target=message.targetId===localNetworkId?'당신':'아군'
+          if(message.targetId===localNetworkId){
+            audio.hurt()
+            if(message.event==='PLAYER_FLUX_LOCKED'){audio.fluxLocked()}
+            say(`HIT -${damage} · HP ${remaining}/${maxHealth}`)
+          }else{
+            say(`${target}에게 HIT -${damage}`)
+          }
+        }
         if(message.event==='CORE_EXPLODED'&&message.x!==undefined&&message.z!==undefined&&message.team)spawnExplosion(message.x,message.z,message.team,performance.now(),message.chain??1,message.piercing,message.y??0)
         if(message.event==='OBJECT_DESTROYED'&&message.x!==undefined&&message.z!==undefined)destroyWallView(`${message.x},${message.z}`)
         if((message.event==='CHAIN_STARTED'||message.event==='CHAIN_EXTENDED')&&message.chain){chainBest=Math.max(chainBest,message.chain);say(`CHAIN ×${message.chain}! SERVER AUTHORITATIVE`)}
         if(message.event==='CORE_PLACED')audio.place()
         if(message.event==='PLAYER_RESCUED')audio.rescue()
-        if(labels[message.event])say(labels[message.event])
+        const gestureByEvent:Partial<Record<string,RippleGestureKind>>={CORE_PLACED:'place',WALL_BUILT:'build',CORE_KICKED:'kick',CORE_THROWN:'throw',PLAYER_RESCUED:'rescue',PLAYER_DASHED:'dash'}
+        const gesture=gestureByEvent[message.event],gestureActor=message.actorId?actors.find(actor=>actor.networkId===message.actorId):undefined
+        if(gesture&&gestureActor)triggerGesture(gestureActor,gesture)
+        if(message.event==='PLAYER_HIT'||message.event==='PLAYER_FLUX_LOCKED'||message.event==='PLAYER_KNOCKED'){
+          const hitActor=message.targetId?actors.find(actor=>actor.networkId===message.targetId):undefined
+          if(hitActor)triggerGesture(hitActor,'hit')
+        }
+        if(labels[message.event]&&message.event!=='PLAYER_FLUX_LOCKED')say(labels[message.event])
       }
     }
     const stopNetwork=networkClient?.onMessage(onNetworkMessage)??(()=>{})
@@ -506,19 +591,25 @@ export default function SplashArena({onExit,networkSession}:{onExit:()=>void;net
       audio.unlock();music.unlock()
       if([' ','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(event.key))event.preventDefault()
       if((networkClient?networkCountdown:Math.ceil((countdownEnds-performance.now())/1000))>0||ended)return
+      if(controlled.eliminated){
+        if(event.key==='ArrowLeft'||event.key==='ArrowUp')cycleCameraTarget(-1)
+        if(event.key==='ArrowRight'||event.key==='ArrowDown')cycleCameraTarget(1)
+        return
+      }
       keys.add(event.key.toLowerCase())
       if(event.code==='Space'&&!event.repeat)jump()
-      if(event.key.toLowerCase()==='f'&&!controlled.falling&&performance.now()-lastPlace>280){lastPlace=performance.now();if(networkClient){networkClient.send({type:'ACTION',seq:++inputSequence,action:'PLACE',direction:cardinalDirection()});say('CORE PLACED · SERVER VALIDATING')}else if(placeCore(controlled,controlled.x,controlled.z)){audio.place();say('Splash Core 설치 — 기존 Core가 터지면 슬롯이 돌아옵니다')}}
+      if(event.key.toLowerCase()==='f'&&!controlled.falling&&!controlled.downedUntil&&performance.now()-lastPlace>280){lastPlace=performance.now();if(networkClient){networkClient.send({type:'ACTION',seq:++inputSequence,action:'PLACE',direction:cardinalDirection()});say('CORE PLACED · SERVER VALIDATING')}else if(placeCore(controlled,controlled.x,controlled.z)){audio.place();say('Splash Core 설치 — 기존 Core가 터지면 슬롯이 돌아옵니다')}}
       if(event.key==='Shift')dash()
       if(event.key.toLowerCase()==='e')kick()
       if(event.key.toLowerCase()==='q'&&!event.repeat){if(controlled.canThrow){aiming=true;say('CORE THROW · Q를 누른 채 마우스로 착지 방향을 조준하세요')}else say('던지기 아이템을 먼저 획득하세요')}
       if(event.key.toLowerCase()==='c')buildWall()
       if(event.key.toLowerCase()==='r')rescueAlly()
     }
-    const onUp=(event:KeyboardEvent)=>{keys.delete(event.key.toLowerCase());if(event.key.toLowerCase()==='q'&&aiming){aiming=false;throwCore()}}
+    const onUp=(event:KeyboardEvent)=>{keys.delete(event.key.toLowerCase());if(controlled.eliminated&&event.key.toLowerCase()==='q'){aiming=false;return}if(event.key.toLowerCase()==='q'&&aiming){aiming=false;throwCore()}}
     const raycaster=new THREE.Raycaster(),pointer=new THREE.Vector2(),groundPlane=new THREE.Plane(new THREE.Vector3(0,1,0),0),pointerHit=new THREE.Vector3()
     const onPointerMove=(event:PointerEvent)=>{
       const bounds=renderer.domElement.getBoundingClientRect();pointer.set((event.clientX-bounds.left)/bounds.width*2-1,-((event.clientY-bounds.top)/bounds.height)*2+1)
+      if(controlled.eliminated)return
       raycaster.setFromCamera(pointer,camera)
       if(raycaster.ray.intersectPlane(groundPlane,pointerHit)){
         const dx=pointerHit.x-controlled.x,dz=pointerHit.z-controlled.z,length=Math.hypot(dx,dz)
@@ -534,20 +625,40 @@ export default function SplashArena({onExit,networkSession}:{onExit:()=>void;net
       if(ended)return
       if((networkClient?networkCountdown:Math.ceil((countdownEnds-now)/1000))>0)return
       elapsed+=dt
-      if(!networkClient)actors.forEach(actor=>{
+      const jumpSampleNow=now+dt*1000*0.5
+      if(!networkClient){
+        actors.forEach(actor=>{
         if(actor.eliminated)return
         if(actor.falling){actor.fallVelocity+=GAME_BALANCE.FALL_GRAVITY*dt;actor.jumpY-=actor.fallVelocity*dt;if(actor.jumpY<=GAME_BALANCE.FALL_DEATH_Y)eliminate(actor);return}
-        actor.jumpY=now<actor.jumpUntil?actor.jumpBaseY+Math.sin(Math.max(0,Math.min(1,(now-actor.jumpStarted)/GAME_BALANCE.JUMP_DURATION_MS))*Math.PI)*GAME_BALANCE.JUMP_HEIGHT:(arenaState.walls.has(`${Math.round(actor.x)},${Math.round(actor.z)}`)?GAME_BALANCE.OBSTACLE_TOP_Y:0)
+        if(jumpSampleNow<actor.jumpUntil){
+          actor.fallVelocity=0
+          actor.jumpY=actorJumpHeightAt(actor,jumpSampleNow)
+        }else{
+          const support=arenaState.walls.has(`${Math.round(actor.x)},${Math.round(actor.z)}`)?GAME_BALANCE.OBSTACLE_TOP_Y:0
+          if(support>0&&actor.jumpY>=support-.01){actor.jumpY=support;actor.fallVelocity=0}
+          else if(actor.jumpY>support){
+            actor.fallVelocity+=GAME_BALANCE.FALL_GRAVITY*dt
+            actor.jumpY=Math.max(support,actor.jumpY-actor.fallVelocity*dt)
+            if(actor.jumpY===support)actor.fallVelocity=0
+          }else{actor.jumpY=support;actor.fallVelocity=0}
+        }
       })
-      let side=0,forwardInput=0
-      if(keys.has('a')||keys.has('arrowleft'))side--
-      if(keys.has('d')||keys.has('arrowright'))side++
-      if(keys.has('w')||keys.has('arrowup'))forwardInput++
-      if(keys.has('s')||keys.has('arrowdown'))forwardInput--
-      const forwardX=Math.sin(cameraYaw),forwardZ=Math.cos(cameraYaw),rightX=-forwardZ,rightZ=forwardX
-      let dx=forwardX*forwardInput+rightX*side,dz=forwardZ*forwardInput+rightZ*side
-      if(dx||dz){const length=Math.hypot(dx,dz);dx/=length;dz/=length;facing={x:dx,z:dz};move(controlled,dx,dz,GAME_BALANCE.PLAYER_SPEED,dt)}
-      if(networkClient){const seq=++inputSequence;pendingInputs.push({seq,dx,dz,dt});if(pendingInputs.length>90)pendingInputs=pendingInputs.slice(-90);networkClient.send({type:'INPUT',seq,dx,dz})}
+      }
+      if(canLocalControl()){
+        let side=0,forwardInput=0
+        if(keys.has('a')||keys.has('arrowleft'))side--
+        if(keys.has('d')||keys.has('arrowright'))side++
+        if(keys.has('w')||keys.has('arrowup'))forwardInput++
+        if(keys.has('s')||keys.has('arrowdown'))forwardInput--
+        const forwardX=Math.sin(cameraYaw),forwardZ=Math.cos(cameraYaw),rightX=-forwardZ,rightZ=forwardX
+        let dx=forwardX*forwardInput+rightX*side,dz=forwardZ*forwardInput+rightZ*side
+        if(dx||dz){const length=Math.hypot(dx,dz);dx/=length;dz/=length;facing={x:dx,z:dz};move(controlled,dx,dz,GAME_BALANCE.PLAYER_SPEED,dt,true,jumpSampleNow)}
+        if(networkClient){
+          const seq=++inputSequence;pendingInputs.push({seq,dx,dz,dt});if(pendingInputs.length>90)pendingInputs=pendingInputs.slice(-90);networkClient.send({type:'INPUT',seq,dx,dz})
+        }
+      }else if(networkClient){
+        pendingInputs = []
+      }
       const nextFanState=fanStateAt(elapsed)
       if(nextFanState!==fanState){
         fanState=nextFanState
@@ -556,7 +667,7 @@ export default function SplashArena({onExit,networkSession}:{onExit:()=>void;net
         if(fanState==='CALM'&&(elapsed>=24||elapsed>=60))say('바람이 멎었습니다 — 에너지 경로를 다시 점유하세요')
       }
       if(fanState==='ACTIVE'&&!networkClient){
-        actors.forEach(actor=>move(actor,-1,0,actor.isPlayer?1.18:.92,dt,false))
+        actors.forEach(actor=>move(actor,-1,0,actor.isPlayer?1.18:.92,dt,false,jumpSampleNow))
         if(now-lastFanPush>650){
           lastFanPush=now
           cores.filter(core=>!core.flight).sort((a,b)=>a.x-b.x).forEach(core=>{
@@ -595,7 +706,7 @@ export default function SplashArena({onExit,networkSession}:{onExit:()=>void;net
         let botDx=target.x-brain.x,botDz=target.z-brain.z
         if(botInDanger){botDx=-botDx;botDz=-botDz}
         const botLength=Math.hypot(botDx,botDz)||1;botDx/=botLength;botDz/=botLength
-        move(brain,botDx,botDz,botInDanger?3.45:downedAlly?2.75:GAME_BALANCE.BOT_SPEED,dt)
+        move(brain,botDx,botDz,botInDanger?3.45:downedAlly?2.75:GAME_BALANCE.BOT_SPEED,dt,false,jumpSampleNow)
         if(downedAlly){rescue(brain,downedAlly,now);return}
         const placedAt=botPlace.get(brain.id)??0
         if(now-placedAt>2050+index*180&&Math.hypot(target.x-brain.x,target.z-brain.z)<7.5){botPlace.set(brain.id,now);placeCore(brain,brain.x,brain.z,2.55+index*.12)}
@@ -647,24 +758,23 @@ export default function SplashArena({onExit,networkSession}:{onExit:()=>void;net
       actors.forEach((actor,index)=>{
         const x=networkClient?actor.renderX:actor.x,z=networkClient?actor.renderZ:actor.z
         const travel=Math.hypot(x-actor.lastRenderX,z-actor.lastRenderZ),travelSpeed=travel/Math.max(dt,.001),canWalk=!actor.falling&&!actor.downedUntil&&!actor.eliminated
-        const targetWalk=canWalk?THREE.MathUtils.clamp(travelSpeed/GAME_BALANCE.PLAYER_SPEED,0,1):0
+        const support=arenaState.walls.has(`${Math.round(actor.x)},${Math.round(actor.z)}`)?GAME_BALANCE.OBSTACLE_TOP_Y:0
+        const feetGrounded=Math.abs(actor.jumpY-support)<.09
+        const airborne=!feetGrounded&&!actor.eliminated
+        if(actor.wasAirborne&&feetGrounded)actor.landingBlend=1
+        actor.wasAirborne=airborne
+        actor.landingBlend=Math.max(0,actor.landingBlend-dt*4.6)
+        const targetWalk=canWalk&&feetGrounded?THREE.MathUtils.clamp(travelSpeed/GAME_BALANCE.PLAYER_SPEED,0,1):0
         actor.walkBlend=THREE.MathUtils.lerp(actor.walkBlend,targetWalk,1-Math.exp(-dt*(targetWalk>actor.walkBlend?9:6.5)))
-        if(travel>.0005)actor.walkPhase+=travel*8.4
-        const stride=Math.sin(actor.walkPhase)*actor.walkBlend,leftLift=Math.max(0,stride),rightLift=Math.max(0,-stride),motionBlend=1-Math.exp(-dt*11)
-        actor.rig.leftArm.rotation.x=THREE.MathUtils.lerp(actor.rig.leftArm.rotation.x,stride*.46,motionBlend)
-        actor.rig.rightArm.rotation.x=THREE.MathUtils.lerp(actor.rig.rightArm.rotation.x,-stride*.46,motionBlend)
-        actor.rig.leftArm.rotation.z=THREE.MathUtils.lerp(actor.rig.leftArm.rotation.z,-1.02+stride*.22,motionBlend)
-        actor.rig.rightArm.rotation.z=THREE.MathUtils.lerp(actor.rig.rightArm.rotation.z,1.02+stride*.22,motionBlend)
-        actor.rig.leftLeg.rotation.x=THREE.MathUtils.lerp(actor.rig.leftLeg.rotation.x,-stride*.68,motionBlend)
-        actor.rig.rightLeg.rotation.x=THREE.MathUtils.lerp(actor.rig.rightLeg.rotation.x,stride*.68,motionBlend)
-        actor.rig.leftLeg.rotation.z=THREE.MathUtils.lerp(actor.rig.leftLeg.rotation.z,-stride*.1,motionBlend)
-        actor.rig.rightLeg.rotation.z=THREE.MathUtils.lerp(actor.rig.rightLeg.rotation.z,stride*.1,motionBlend)
-        actor.rig.leftLeg.position.y=THREE.MathUtils.lerp(actor.rig.leftLeg.position.y,.2+leftLift*.06,motionBlend)
-        actor.rig.rightLeg.position.y=THREE.MathUtils.lerp(actor.rig.rightLeg.position.y,.2+rightLift*.06,motionBlend)
-        actor.rig.body.rotation.z=THREE.MathUtils.lerp(actor.rig.body.rotation.z,stride*.026,motionBlend)
+        if(travel>.0005&&feetGrounded)actor.walkPhase+=travel*rippleStepRate(actor.rig.variant)
+        const motionBlend=1-Math.exp(-dt*13)
+        const turnIntent=THREE.MathUtils.clamp(Math.atan2(Math.sin(actor.targetYaw-actor.yaw),Math.cos(actor.targetYaw-actor.yaw))*1.5,-1,1)
+        let gestureProgress=0
+        if(actor.gesture){gestureProgress=(now-actor.gestureStarted)/RIPPLE_GESTURE_DURATION[actor.gesture];if(gestureProgress>=1){actor.gesture=null;gestureProgress=1}}
+        poseRippleRig(actor.rig,actor.walkPhase,actor.walkBlend,dt,now,airborne?1:0,actor.landingBlend,turnIntent,actor.gesture,gestureProgress,actor.downedUntil?1:0)
         actor.yaw=lerpAngle(actor.yaw,actor.targetYaw,1-Math.exp(-dt*13));actor.model.rotation.y=actor.yaw
-        actor.model.rotation.x=THREE.MathUtils.lerp(actor.model.rotation.x,actor.falling?-.42:actor.walkBlend*.028,motionBlend);actor.model.rotation.z=THREE.MathUtils.lerp(actor.model.rotation.z,actor.falling?Math.sin(now*.008+index)*.2:0,motionBlend)
-        actor.model.position.set(x,actor.jumpY+(leftLift+rightLift)*.006+Math.sin(now*.003+index)*.003,z);actor.shadow.position.set(x,.025,z);actor.shadow.scale.setScalar(1-THREE.MathUtils.clamp(actor.jumpY*.22,0,.3));(actor.shadow.material as THREE.MeshBasicMaterial).opacity=actor.falling?0:.42-THREE.MathUtils.clamp(actor.jumpY*.14,0,.2);actor.rescueRing.position.set(x,.13,z);actor.lastRenderX=x;actor.lastRenderZ=z
+        actor.model.rotation.x=THREE.MathUtils.lerp(actor.model.rotation.x,actor.falling?-.42:0,motionBlend);actor.model.rotation.z=THREE.MathUtils.lerp(actor.model.rotation.z,actor.falling?Math.sin(now*.008+index)*.2:0,motionBlend)
+        actor.model.position.set(x,actor.jumpY,z);actor.shadow.position.set(x,.025,z);actor.shadow.scale.setScalar(1-THREE.MathUtils.clamp(actor.jumpY*.22,0,.3));(actor.shadow.material as THREE.MeshBasicMaterial).opacity=actor.falling?0:.42-THREE.MathUtils.clamp(actor.jumpY*.14,0,.2);actor.rescueRing.position.set(x,.13,z);actor.lastRenderX=x;actor.lastRenderZ=z
         if(actor.rescueRing.visible){const pulse=1+Math.sin(now*.012+index)*.25;actor.rescueRing.scale.setScalar(pulse);actor.rescueRing.rotation.z+=dt*2.5}
       })
       if(debug){
@@ -703,12 +813,13 @@ export default function SplashArena({onExit,networkSession}:{onExit:()=>void;net
         if(piece.mesh.position.y<.11){piece.mesh.position.y=.11;piece.velocity.y=Math.abs(piece.velocity.y)*.34;piece.velocity.x*=.82;piece.velocity.z*=.82}
         if(age>1.35){scene.remove(piece.mesh);piece.mesh.geometry.dispose();(piece.mesh.material as THREE.Material).dispose();debris.splice(index,1)}
       }
-      const controlledX=networkClient?controlled.renderX:controlled.x,controlledZ=networkClient?controlled.renderZ:controlled.z
+      const followTarget=controlled.eliminated&&cameraTarget?cameraTarget:controlled
+      const controlledX=networkClient?followTarget.renderX:followTarget.x,controlledZ=networkClient?followTarget.renderZ:followTarget.z
       const cameraForwardX=Math.sin(cameraYaw),cameraForwardZ=Math.cos(cameraYaw)
       const desiredCamera=new THREE.Vector3(controlledX-cameraForwardX*6.4,4.25,controlledZ-cameraForwardZ*6.4)
       if(shake>.002){desiredCamera.x+=(Math.random()-.5)*shake;desiredCamera.y+=(Math.random()-.5)*shake*.45;shake*=.88}
       camera.position.lerp(desiredCamera,1-Math.exp(-dt*6.2));camera.lookAt(controlledX+cameraForwardX*2.4,1.05,controlledZ+cameraForwardZ*2.4);renderer.render(scene,camera)
-      if(now-lastUi>100){lastUi=now;const ownerId=networkClient?localNetworkId:controlled.id;setUi(v=>({...v,time:Math.max(0,Math.floor(networkClient?networkRemaining:GAME_BALANCE.MATCH_SECONDS-elapsed)),countdown:presentedCountdown,localTeam:controlled.team,playerHits:controlled.hits,health:Math.max(0,3-controlled.hits),botHits:bot.hits,allyHits:ally.hits,rival2Hits:vio.hits,alliesAlive:actors.filter(actor=>actor.team===controlled.team&&!actor.eliminated&&actor.model.visible).length,rivalsAlive:actors.filter(actor=>actor.team!==controlled.team&&!actor.eliminated&&actor.model.visible).length,onlineHumans:networkHumanCount,cores:Math.max(0,controlled.bombCapacity-cores.filter(core=>core.owner===ownerId).length),capacity:controlled.bombCapacity,canKick:controlled.canKick,canThrow:controlled.canThrow,pierceCharges:controlled.pierceCharges,chain:chainBest,dash:Math.min(1,Math.max(0,(now-controlled.dashReady+GAME_BALANCE.DASH_COOLDOWN_MS)/GAME_BALANCE.DASH_COOLDOWN_MS)),build:Math.min(1,Math.max(0,(now-controlled.buildReady+GAME_BALANCE.BUILD_COOLDOWN_MS)/GAME_BALANCE.BUILD_COOLDOWN_MS)),fan:fanState,vehicle:vehicleActive,fps:Math.round(1/Math.max(.001,dt)),frameMs:Number((dt*1000).toFixed(1)),drawCalls:renderer.info.render.calls,triangles:renderer.info.render.triangles,textures:renderer.info.memory.textures,simBodies:actors.filter(actor=>actor.model.visible).length+cores.length+itemViews.size,rtt:networkRtt,packetRate,pendingInputs:pendingInputs.length,serverPos:`${controlled.serverX.toFixed(2)},${controlled.serverZ.toFixed(2)}`,clientPos:`${controlled.x.toFixed(2)},${controlled.z.toFixed(2)}`}))}
+      if(now-lastUi>100){lastUi=now;const ownerId=networkClient?localNetworkId:controlled.id;setUi(v=>({...v,time:Math.max(0,Math.floor(networkClient?networkRemaining:GAME_BALANCE.MATCH_SECONDS-elapsed)),countdown:presentedCountdown,localTeam:controlled.team,playerHits:controlled.hits,maxHealth:GAME_BALANCE.PLAYER_MAX_HITS,health:Math.max(0,GAME_BALANCE.PLAYER_MAX_HITS-controlled.hits),jump:Math.min(1,Math.max(0,(now-controlled.jumpReady+GAME_BALANCE.JUMP_COOLDOWN_MS)/GAME_BALANCE.JUMP_COOLDOWN_MS)),botHits:bot.hits,allyHits:ally.hits,rival2Hits:vio.hits,alliesAlive:actors.filter(actor=>actor.team===controlled.team&&!actor.eliminated&&actor.model.visible).length,rivalsAlive:actors.filter(actor=>actor.team!==controlled.team&&!actor.eliminated&&actor.model.visible).length,onlineHumans:networkHumanCount,cores:Math.max(0,controlled.bombCapacity-cores.filter(core=>core.owner===ownerId).length),capacity:controlled.bombCapacity,canKick:controlled.canKick,canThrow:controlled.canThrow,pierceCharges:controlled.pierceCharges,chain:chainBest,dash:Math.min(1,Math.max(0,(now-controlled.dashReady+GAME_BALANCE.DASH_COOLDOWN_MS)/GAME_BALANCE.DASH_COOLDOWN_MS)),build:Math.min(1,Math.max(0,(now-controlled.buildReady+GAME_BALANCE.BUILD_COOLDOWN_MS)/GAME_BALANCE.BUILD_COOLDOWN_MS)),fan:fanState,vehicle:vehicleActive,fps:Math.round(1/Math.max(.001,dt)),frameMs:Number((dt*1000).toFixed(1)),drawCalls:renderer.info.render.calls,triangles:renderer.info.render.triangles,textures:renderer.info.memory.textures,simBodies:actors.filter(actor=>actor.model.visible).length+cores.length+itemViews.size,rtt:networkRtt,packetRate,pendingInputs:pendingInputs.length,serverPos:`${controlled.serverX.toFixed(2)},${controlled.serverZ.toFixed(2)}`,clientPos:`${controlled.x.toFixed(2)},${controlled.z.toFixed(2)}`}))}
       frame=requestAnimationFrame(loop)
     }
     frame=requestAnimationFrame(loop)
@@ -724,14 +835,17 @@ export default function SplashArena({onExit,networkSession}:{onExit:()=>void;net
   const yourTeam=localCyan?{names:'BLOO · LUMI',images:[BLUE,YELLOW]}:{names:'CORAL · VIO',images:[RED,VIO]}
   const rivalTeam=localCyan?{names:'CORAL · VIO',images:[RED,VIO]}:{names:'BLOO · LUMI',images:[BLUE,YELLOW]}
   const winnerTeam=result==='win'?yourTeam:rivalTeam
+  const cooldownLabel=(ratio:number,ms:number)=>ratio>=.99?'READY':`${Math.max(.1,Number((((1-ratio)*ms)/1000).toFixed(1)))}초`
   return <main className="game">
     <div ref={hostRef} className="three-host"/>
     <header className="game-header"><button onClick={onExit}><ArrowLeft/> 나가기</button><div className="match-brand"><Mark/><span>ROCK SIZZLE PREPPERS<small>CORE SKIRMISH · 30 HZ SIM</small></span></div><button className={`sound ${muted?'muted':''}`} onClick={()=>setMuted(value=>!value)} aria-label={muted?'사운드 켜기':'사운드 끄기'}>{muted?<VolumeX/>:<Volume2/>}</button></header>
     <section className="score"><div className={`team you ${ui.localTeam}`}><span className="avatar-stack"><img src={yourTeam.images[0]}/><img src={yourTeam.images[1]}/></span><span>TEAM YOU<small>{yourTeam.names}</small></span><b>{ui.alliesAlive}</b></div><time>{String(Math.floor(ui.time/60)).padStart(2,'0')}:{String(ui.time%60).padStart(2,'0')}</time><div className={`team rival ${localCyan?'coral':'cyan'}`}><b>{ui.rivalsAlive}</b><span>RIVALS<small>{rivalTeam.names}</small></span><span className="avatar-stack"><img src={rivalTeam.images[0]}/><img src={rivalTeam.images[1]}/></span></div></section>
     <div className="message"><Sparkles/>{ui.message}</div>
-    <div className="health-hud"><span>HP</span>{[0,1,2].map(index=><Heart key={index} className={index<ui.health?'filled':'empty'}/>)}</div>
+    <div className="health-hud"><span>HP</span>{[...Array(ui.maxHealth)].map((_,index)=><Heart key={index} className={index<ui.health?'filled':'empty'}/>)}
+      <b>{ui.health}/{ui.maxHealth}</b>
+    </div>
     <aside className="status-panel"><span><Bot/> {networkSession?`ONLINE ${ui.onlineHumans}/4 · BOT FILL`:'3 BOT FILL · 2V2'}</span><span><Gauge/> 30 HZ LOGIC</span><span><Crosshair/> {debug?'DEBUG GRID + COLLIDERS':'HIDDEN GRID'}</span><span className={`fan-state ${ui.fan.toLowerCase()}`}><Wind/> FAN {ui.fan}</span>{ui.vehicle&&<span className="vehicle-state"><Zap/> TOY EXPRESS ACTIVE</span>}{debug&&<><span className="debug-stat">FPS {ui.fps} · {ui.frameMs} MS</span><span className="debug-stat">DRAW {ui.drawCalls} · TRIS {ui.triangles.toLocaleString()}</span><span className="debug-stat">TEX {ui.textures} · SIM BODIES {ui.simBodies}</span><span className="debug-stat">SERVER {ui.serverPos} · CLIENT {ui.clientPos}</span>{networkSession&&<><span className="debug-stat">RTT {ui.rtt} MS · RX {ui.packetRate}/S</span><span className="debug-stat">PENDING INPUT {ui.pendingInputs}</span></>}</>}</aside>
-    <section className="ability-bar"><div><kbd>F</kbd><span className="core-orb"/><p><b>SPLASH CORE</b><small>{ui.cores} / {ui.capacity} READY</small></p></div><div><kbd>SPACE</kbd><ArrowUp/><p><b>JUMP</b><small>벽과 구멍 넘기</small></p></div><div className={ui.build<.99?'cooling':''}><kbd>C</kbd><Box/><p><b>BLOCK BUILD</b><small>{ui.build>=.99?'READY':'COOLDOWN'}</small></p></div><div className={ui.dash<.99?'cooling':''}><kbd>SHIFT</kbd><Zap/><p><b>RIPPLE DASH</b><small>{ui.dash>=.99?'READY':'RECHARGING'}</small></p></div><div className={ui.canKick?'':'locked'}><kbd>E</kbd><HeartPulse/><p><b>CORE KICK</b><small>{ui.canKick?'ITEM READY':'ITEM LOCKED'}</small></p></div><div className={ui.canThrow?'':'locked'}><kbd>Q</kbd><Send/><p><b>CORE THROW</b><small>{ui.canThrow?'ITEM READY':'ITEM LOCKED'}</small></p></div>{(ui.chain>1||ui.pierceCharges>0)&&<strong>{ui.pierceCharges>0?`PIERCE ×${ui.pierceCharges}`:`CHAIN ×${ui.chain}`}</strong>}</section>
+    <section className="ability-bar"><div><kbd>F</kbd><span className="core-orb"/><p><b>SPLASH CORE</b><small>{ui.cores} / {ui.capacity} READY</small></p></div><div className={ui.jump<.99?'cooling':''}><kbd>SPACE</kbd><ArrowUp/><p><b>JUMP</b><small>{ui.jump>=.99?'READY':`RECHARGING (${cooldownLabel(ui.jump,GAME_BALANCE.JUMP_COOLDOWN_MS)})`}</small></p></div><div className={ui.build<.99?'cooling':''}><kbd>C</kbd><Box/><p><b>BLOCK BUILD</b><small>{ui.build>=.99?'READY':`COOLDOWN (${cooldownLabel(ui.build,GAME_BALANCE.BUILD_COOLDOWN_MS)})`}</small></p></div><div className={ui.dash<.99?'cooling':''}><kbd>SHIFT</kbd><Zap/><p><b>RIPPLE DASH</b><small>{ui.dash>=.99?'READY':`RECHARGING (${cooldownLabel(ui.dash,GAME_BALANCE.DASH_COOLDOWN_MS)})`}</small></p></div><div className={ui.canKick?'':'locked'}><kbd>E</kbd><HeartPulse/><p><b>CORE KICK</b><small>{ui.canKick?'ITEM READY':'ITEM LOCKED'}</small></p></div><div className={ui.canThrow?'':'locked'}><kbd>Q</kbd><Send/><p><b>CORE THROW</b><small>{ui.canThrow?'ITEM READY':'ITEM LOCKED'}</small></p></div>{(ui.chain>1||ui.pierceCharges>0)&&<strong>{ui.pierceCharges>0?`PIERCE ×${ui.pierceCharges}`:`CHAIN ×${ui.chain}`}</strong>}</section>
     <div className="controls">WASD 이동 <i/> SPACE 점프 <i/> F 폭탄 <i/> C 장애물 <i/> SHIFT 대시 <i/> E 밀기 <i/> Q 투척 <i/> R 구조</div>
     {ui.countdown>0&&<div className="match-countdown"><span>GET READY</span><strong>{ui.countdown}</strong><small>PREDICT · MANIPULATE · ESCAPE</small></div>}
     {result&&<div className="result-overlay"><div className={`result-panel ${result}`}><span>{result==='win'?'YOUR TEAM SECURED':'YOUR TEAM FLUX LOCKED'}</span><h1>{winnerTeam.names.replace(' · ',' & ')} WIN!</h1><p>{result==='win'?'연쇄 파동과 구조 타이밍으로 팀이 끝까지 살아남았습니다.':'아군이 잠긴 6초 동안 접근해 R로 구조하면 흐름을 뒤집을 수 있습니다.'}</p><div><button onClick={restart}><RotateCcw/> 한 판 더</button><button onClick={onExit}>로비로</button></div></div></div>}

@@ -5,6 +5,10 @@ export class AudioManager{
   unlock(){if(this.isMuted())return;this.context??=new AudioContext();if(this.context.state==='suspended')void this.context.resume()}
 
   place(){this.tone(360,.08,'sine',.04);window.setTimeout(()=>this.tone(520,.09,'sine',.035),65)}
+  jump(){this.tone(360,.09,'triangle',.032)}
+  cooldown(){this.tone(520,.08,'sine',.028)}
+  hurt(){this.tone(180,.16,'sawtooth',.028)}
+  fluxLocked(){this.sweep(340,100,.19,'sawtooth',.05)}
   dash(){this.sweep(260,680,.13,'triangle',.035)}
   throwCore(){this.sweep(310,820,.22,'sine',.045)}
   kick(){this.tone(145,.09,'square',.032)}
