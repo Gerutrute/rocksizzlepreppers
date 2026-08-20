@@ -427,13 +427,15 @@ export default function SplashArena({onExit,networkSession}:{onExit:()=>void;net
     }
     const move=(actor:Actor,dx:number,dz:number,speed:number,dt:number,faceMovement=true,jumpSampleNow: number=performance.now())=>{
       if(actor.eliminated||actor.falling||actor.downedUntil)return
+      const startX=actor.x,startZ=actor.z
       const output=performance.now()<actor.lockedUntil ? .42 : 1
       const nx=actor.x+dx*speed*output*dt,nz=actor.z+dz*speed*output*dt
       const jumpAt=(x:number,z:number)=>actorJumpHeightAt(actor,jumpSampleNow,x,z)
       const occupiedX=jumpAt(nx,actor.z),occupiedZ=jumpAt(actor.x,nz)
       if(actorCanOccupy(actor,nx,actor.z,occupiedX))actor.x=THREE.MathUtils.clamp(nx,-HALF_X-.28,HALF_X+.28)
       if(actorCanOccupy(actor,actor.x,nz,occupiedZ))actor.z=THREE.MathUtils.clamp(nz,-HALF_Z-.28,HALF_Z+.28)
-      if(faceMovement&&(dx||dz))actor.targetYaw=Math.atan2(dx,dz)
+      const movedX=actor.x-startX,movedZ=actor.z-startZ
+      if(faceMovement&&Math.hypot(movedX,movedZ)>.0001)actor.targetYaw=Math.atan2(movedX,movedZ)
       actor.shadow.position.set(actor.x,.025,actor.z)
       actor.targetX=actor.x;actor.targetZ=actor.z
     }
@@ -706,7 +708,7 @@ export default function SplashArena({onExit,networkSession}:{onExit:()=>void;net
         let botDx=target.x-brain.x,botDz=target.z-brain.z
         if(botInDanger){botDx=-botDx;botDz=-botDz}
         const botLength=Math.hypot(botDx,botDz)||1;botDx/=botLength;botDz/=botLength
-        move(brain,botDx,botDz,botInDanger?3.45:downedAlly?2.75:GAME_BALANCE.BOT_SPEED,dt,false,jumpSampleNow)
+        move(brain,botDx,botDz,botInDanger?3.45:downedAlly?2.75:GAME_BALANCE.BOT_SPEED,dt,true,jumpSampleNow)
         if(downedAlly){rescue(brain,downedAlly,now);return}
         const placedAt=botPlace.get(brain.id)??0
         if(now-placedAt>2050+index*180&&Math.hypot(target.x-brain.x,target.z-brain.z)<7.5){botPlace.set(brain.id,now);placeCore(brain,brain.x,brain.z,2.55+index*.12)}

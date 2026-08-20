@@ -118,6 +118,15 @@ describe('authoritative room',()=>{
     expect(player.yaw).toBe(facingBeforeWind)
   })
 
+  it('faces the direction actually travelled when an obstacle blocks one movement axis',()=>{
+    const room=new Room('SLIDE-FACING',0),player=room.join('p1','Bloo',0)
+    room.arena.walls.add('4,0');player.x=3.4;player.z=-.6
+    room.input(player.id,1,1,1);room.step(.1,3100)
+    expect(player.x).toBeGreaterThan(3.4)
+    expect(player.z).toBeCloseTo(-.6)
+    expect(player.yaw).toBeCloseTo(Math.PI/2)
+  })
+
   it('keeps an empty room dormant and starts a fresh round for its next visitor',()=>{
     const room=new Room('REUSE',0),first=room.join('first','First',0)
     room.leave(first.id);room.step(1/30,100_000)

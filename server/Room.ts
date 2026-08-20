@@ -160,11 +160,13 @@ export class Room{
       }
       if(player.downedUntil&&now>=player.downedUntil){player.eliminated=true;player.downedUntil=0;this.events.push({event:'PLAYER_ELIMINATED',actorId:player.id});continue}
       if(player.downedUntil)continue
-      if(Math.hypot(player.input.dx,player.input.dz)>.02)player.yaw=Math.atan2(player.input.dx,player.input.dz)
+      const movementStartX=player.x,movementStartZ=player.z
       const speed=GAME_BALANCE.PLAYER_SPEED*dt,nx=player.x+player.input.dx*speed,nz=player.z+player.input.dz*speed
       const occupancyJumpYFor=(x:number,z:number)=>this.jumpHeightAt(player,movementSampleTime,x,z)
       if(this.canOccupy(player,nx,player.z,occupancyJumpYFor(nx,player.z))){player.x=Math.max(-GIANT_PLAYROOM.halfX-.28,Math.min(GIANT_PLAYROOM.halfX+.28,nx))}
       if(this.canOccupy(player,player.x,nz,occupancyJumpYFor(player.x,nz))){player.z=Math.max(-GIANT_PLAYROOM.halfZ-.28,Math.min(GIANT_PLAYROOM.halfZ+.28,nz))}
+      const movedX=player.x-movementStartX,movedZ=player.z-movementStartZ
+      if(Math.hypot(movedX,movedZ)>.0001)player.yaw=Math.atan2(movedX,movedZ)
       if(fan==='ACTIVE'){
         const windX=player.x-1.05*dt
         if(this.canOccupy(player,windX,player.z,occupancyJumpYFor(windX,player.z)))player.x=Math.max(-GIANT_PLAYROOM.halfX-.28,windX)
