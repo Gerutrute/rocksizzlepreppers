@@ -20,16 +20,14 @@ export const getNeighbors = (cell:GridCell):GridCell[] => [
 ]
 
 export const traceExplosion = (arena:ArenaDefinition,origin:GridCell,range:number):GridCell[] => {
-  const cells=[origin]
-  for(const direction of [{x:1,z:0},{x:-1,z:0},{x:0,z:1},{x:0,z:-1}]){
-    for(let distance=1;distance<=range;distance++){
-      const cell={x:origin.x+direction.x*distance,z:origin.z+direction.z*distance}
-      if(isCellBlocked(arena,cell))break
-      cells.push(cell)
-    }
-  }
+  const cells:GridCell[]=[]
+  const minX=Math.max(-arena.halfX,Math.ceil(origin.x-range)),maxX=Math.min(arena.halfX,Math.floor(origin.x+range))
+  const minZ=Math.max(-arena.halfZ,Math.ceil(origin.z-range)),maxZ=Math.min(arena.halfZ,Math.floor(origin.z+range))
+  for(let z=minZ;z<=maxZ;z++)for(let x=minX;x<=maxX;x++)if(Math.hypot(x-origin.x,z-origin.z)<=range+.001)cells.push({x,z})
   return cells
 }
+
+export const isInsideCircularBlast=(origin:{x:number;z:number},target:{x:number;z:number},range:number,targetRadius=0)=>Math.hypot(target.x-origin.x,target.z-origin.z)<=range+targetRadius
 
 export const getDangerCells = (arena:ArenaDefinition,cores:ReadonlyArray<GridCell>,range:number) => {
   const unique=new Map<string,GridCell>()

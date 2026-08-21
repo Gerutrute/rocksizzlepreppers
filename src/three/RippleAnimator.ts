@@ -9,7 +9,7 @@ const FOOT_LIFT=.085
 
 type LegPose={hip:number;knee:number;ankle:number;lift:number}
 type MotionProfile={stepRate:number;stride:number;lift:number;arm:number;sway:number;bob:number;antenna:number;bodyHeight:number}
-export type RippleGestureKind='place'|'build'|'kick'|'throw'|'rescue'|'dash'|'hit'
+export type RippleGestureKind='place'|'build'|'kick'|'throw'|'rescue'|'dash'|'hit'|'taunt'
 
 export const RIPPLE_GESTURE_DURATION:Record<RippleGestureKind,number>={
   place:480,
@@ -19,6 +19,7 @@ export const RIPPLE_GESTURE_DURATION:Record<RippleGestureKind,number>={
   rescue:680,
   dash:420,
   hit:460,
+  taunt:1650,
 }
 
 const MOTION_PROFILES:Record<RippleVariant,MotionProfile>={
@@ -63,7 +64,7 @@ export function poseRippleRig(rig:RippleRig,phase:number,blend:number,dt:number,
   let leftArmX=leftArm*.52*profile.arm,rightArmX=rightArm*.52*profile.arm
   let leftArmZ=THREE.MathUtils.lerp(-1.02+leftArm*.1,-.74,airborne),rightArmZ=THREE.MathUtils.lerp(1.02-rightArm*.1,.74,airborne)
   let leftForearmX=THREE.MathUtils.lerp(-.1-left.lift*2.6,-.34,airborne),rightForearmX=THREE.MathUtils.lerp(-.1-right.lift*2.6,-.34,airborne)
-  let actionBodyPitch=0,actionBodyYaw=0,actionBodyRoll=0,actionBodyDrop=0
+  let actionBodyPitch=0,actionBodyYaw=0,actionBodyRoll=0,actionBodyDrop=0,actionSquash=0
 
   if(gesture&&gestureWeight>0){
     if(gesture==='place'){
@@ -106,6 +107,37 @@ export function poseRippleRig(rig:RippleRig,phase:number,blend:number,dt:number,
       leftArmZ=THREE.MathUtils.lerp(leftArmZ,-1.28,gestureWeight);rightArmZ=THREE.MathUtils.lerp(rightArmZ,1.28,gestureWeight)
       leftKnee+=gestureWeight*.3;rightKnee+=gestureWeight*.18;actionBodyPitch=-.16*gestureWeight;actionBodyRoll=.2*gestureWeight;actionBodyDrop=.03*gestureWeight
     }
+    if(gesture==='taunt'){
+      const beats=rig.variant==='coral'?4:rig.variant==='vio'?3:2
+      const squat=Math.pow(Math.sin(gestureProgress*Math.PI*beats),2)*gestureWeight
+      const sideWave=Math.sin(gestureProgress*Math.PI*beats*2)*gestureWeight
+      if(rig.variant==='bloo'){
+        leftKnee+=squat*.78;rightKnee+=squat*.78
+        leftArmX=THREE.MathUtils.lerp(leftArmX,-.38,squat);rightArmX=THREE.MathUtils.lerp(rightArmX,-.38,squat)
+        leftArmZ=THREE.MathUtils.lerp(leftArmZ,-.58,gestureWeight);rightArmZ=THREE.MathUtils.lerp(rightArmZ,.58,gestureWeight)
+        actionBodyDrop=.13*squat;actionBodyYaw=.13*sideWave;actionSquash=.035*squat
+      }
+      if(rig.variant==='coral'){
+        leftKnee+=squat*.62;rightKnee+=squat*.62
+        leftArmX=THREE.MathUtils.lerp(leftArmX,.22*sideWave,squat);rightArmX=THREE.MathUtils.lerp(rightArmX,-.22*sideWave,squat)
+        leftArmZ=THREE.MathUtils.lerp(leftArmZ,-.88+.16*sideWave,gestureWeight);rightArmZ=THREE.MathUtils.lerp(rightArmZ,.88+.16*sideWave,gestureWeight)
+        actionBodyDrop=.105*squat;actionBodyRoll=.15*sideWave;actionBodyYaw=-.08*sideWave;actionSquash=.045*squat
+      }
+      if(rig.variant==='lumi'){
+        const heavySquat=Math.pow(squat,.72)
+        leftKnee+=heavySquat*1.02;rightKnee+=heavySquat*1.02
+        leftArmX=THREE.MathUtils.lerp(leftArmX,-.94,gestureWeight);rightArmX=THREE.MathUtils.lerp(rightArmX,-.94,gestureWeight)
+        leftArmZ=THREE.MathUtils.lerp(leftArmZ,-.48,gestureWeight);rightArmZ=THREE.MathUtils.lerp(rightArmZ,.48,gestureWeight)
+        actionBodyDrop=.18*heavySquat;actionBodyPitch=-.08*gestureWeight+.13*heavySquat;actionSquash=.11*heavySquat
+      }
+      if(rig.variant==='vio'){
+        const bow=THREE.MathUtils.smoothstep(gestureProgress,0,.3)*(1-THREE.MathUtils.smoothstep(gestureProgress,.72,1))*gestureWeight
+        leftKnee+=squat*.68;rightKnee+=squat*.42
+        leftArmX=THREE.MathUtils.lerp(leftArmX,-.7,bow);rightArmX=THREE.MathUtils.lerp(rightArmX,-.24,bow)
+        leftArmZ=THREE.MathUtils.lerp(leftArmZ,-1.22,bow);rightArmZ=THREE.MathUtils.lerp(rightArmZ,1.02,bow)
+        actionBodyDrop=.1*squat;actionBodyPitch=.2*bow;actionBodyYaw=.28*sideWave;actionBodyRoll=-.08*bow;actionSquash=.03*squat
+      }
+    }
   }
 
   if(downed>0){
@@ -140,15 +172,18 @@ export function poseRippleRig(rig:RippleRig,phase:number,blend:number,dt:number,
   rig.body.rotation.x=damp(rig.body.rotation.x,blend*.025-airborne*.045+actionBodyPitch,dt,10)
   rig.body.rotation.y=damp(rig.body.rotation.y,-turn*.022+turnIntent*.12+actionBodyYaw,dt,9)
   rig.body.rotation.z=damp(rig.body.rotation.z,-weight*.052-turnIntent*.035+actionBodyRoll,dt,9)
-  rig.body.scale.x=damp(rig.body.scale.x,1-breathing+landing*.035,dt,8)
-  rig.body.scale.y=damp(rig.body.scale.y,1+breathing-landing*.06,dt,8)
-  rig.body.scale.z=damp(rig.body.scale.z,1-breathing*.4+landing*.035,dt,8)
+  rig.body.scale.x=damp(rig.body.scale.x,1-breathing+landing*.035+actionSquash*.58,dt,8)
+  rig.body.scale.y=damp(rig.body.scale.y,1+breathing-landing*.06-actionSquash,dt,8)
+  rig.body.scale.z=damp(rig.body.scale.z,1-breathing*.4+landing*.035+actionSquash*.58,dt,8)
 
   rig.antennae.forEach((antenna,index)=>{
     const delayWave=Math.sin(phase-.48-index*.22)*blend
     const idleWave=Math.sin(now*.0018+index*1.7)*(1-blend)
-    antenna.rotation.x=damp(antenna.rotation.x,(-delayWave*.1+idleWave*.018)*profile.antenna+airborne*.12,dt,5.5)
-    antenna.rotation.z=damp(antenna.rotation.z,(antenna.userData.restTilt as number)+delayWave*(index%2?.055:-.055)*profile.antenna-turnIntent*.045,dt,5.5)
+    const tauntWave=gesture==='taunt'?Math.sin(gestureProgress*Math.PI*(rig.variant==='coral'?8:4)+index*Math.PI)*gestureWeight:0
+    const tauntNod=gesture==='taunt'?Math.pow(Math.sin(gestureProgress*Math.PI*(rig.variant==='lumi'?2:3)),2)*gestureWeight:0
+    const tauntSwing=rig.variant==='bloo'?.13:rig.variant==='coral'?.19:rig.variant==='vio'?.15:.08
+    antenna.rotation.x=damp(antenna.rotation.x,(-delayWave*.1+idleWave*.018)*profile.antenna+airborne*.12+tauntNod*.12,dt,5.5)
+    antenna.rotation.z=damp(antenna.rotation.z,(antenna.userData.restTilt as number)+delayWave*(index%2?.055:-.055)*profile.antenna-turnIntent*.045+tauntWave*tauntSwing,dt,5.5)
   })
 
   const blink=Math.pow(Math.max(0,Math.sin(now*.00155+personalityPhase)),28)

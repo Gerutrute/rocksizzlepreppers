@@ -25,6 +25,9 @@ export type NetworkPlayer = {
   falling:boolean
   downedUntil:number
   eliminated:boolean
+  tauntStartedAt:number
+  tauntUntil:number
+  tauntReady:number
   lastInput:number
 }
 
@@ -66,7 +69,7 @@ export type RoomSnapshot = {
 export type ClientMessage =
   | {type:'JOIN';roomId:string;name:string;variant:RippleVariant}
   | {type:'INPUT';seq:number;dx:number;dz:number}
-  | {type:'ACTION';seq:number;action:'PLACE'|'DASH'|'KICK'|'THROW'|'RESCUE'|'JUMP'|'BUILD';direction:{x:number;z:number}}
+  | {type:'ACTION';seq:number;action:'PLACE'|'DASH'|'KICK'|'THROW'|'RESCUE'|'JUMP'|'BUILD'|'TAUNT';direction:{x:number;z:number}}
   | {type:'REMATCH'}
 
 export type ServerMessage =

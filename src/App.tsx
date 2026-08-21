@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react'
-import { ChevronRight, Copy, Gamepad2, Play, Radio, Sparkles, Users, Volume2, VolumeX, Zap } from 'lucide-react'
+import { ChevronRight, Copy, Gamepad2, Play, Radio, Sparkles, Users, Volume2, VolumeX } from 'lucide-react'
 import type { RippleVariant } from './game-core/protocol'
 import type { NetworkSession } from './network/NetworkClient'
 import { ACHIEVEMENTS, ACHIEVEMENT_PROFILE_EVENT, achievementProgress, readAchievementProfile, type AchievementProfile } from './achievements'
@@ -11,6 +11,9 @@ const RED = '/assets/splash/ripple-red-keyart-v2-web.png'
 const YELLOW = '/assets/splash/ripple-yellow-keyart-v2-web.png'
 const VIO = '/assets/splash/ripple-vio-keyart-v1-web.webp'
 const LOBBY_MUSIC = '/assets/audio/purrfectly-chaotic.mp3'
+const TUTORIAL_MOVE = '/assets/tutorial/move-jump-v1.webp'
+const TUTORIAL_CORE = '/assets/tutorial/place-core-v1.webp'
+const TUTORIAL_ESCAPE = '/assets/tutorial/build-dash-v1.webp'
 
 function Mark() { return <span className="splash-mark" aria-hidden="true"><i/><i/><b/></span> }
 
@@ -46,7 +49,7 @@ function Lobby({ onPlay,onRoom }:{ onPlay:(variant?:RippleVariant)=>void;onRoom:
     </div>}
     <nav className="nav">
       <a className="brand" href="#top"><Mark/><span>ROCK SIZZLE</span><strong>PREPPERS</strong></a>
-      <div className="nav-links"><a href="#ripples">리플</a><a href="#how">게임 소개</a><a href="#achievements">업적</a><a href="#arena">아레나</a></div>
+      <div className="nav-links"><a href="#ripples">리플</a><a href="#controls">조작법</a><a href="#achievements">업적</a><a href="#arena">아레나</a></div>
       <span className="online"><i/> ARENA ONLINE</span>
       <button className={`lobby-sound ${musicMuted?'muted':''}`} onClick={()=>setMusicMuted(value=>!value)} aria-label={musicMuted?'홈 음악 켜기':'홈 음악 끄기'} title="Purrfectly Chaotic">{musicMuted?<VolumeX/>:<Volume2/>}</button>
       <button className="nav-play" onClick={()=>onPlay()}><Play fill="currentColor"/> QUICK MATCH</button>
@@ -75,13 +78,41 @@ function Lobby({ onPlay,onRoom }:{ onPlay:(variant?:RippleVariant)=>void;onRoom:
       <div className="fighter-cards">{fighters.map(f=><article className={`fighter ${f.color}`} key={f.name}><span className="fighter-no">{f.id}</span><img src={f.image} alt={`${f.name} 리플 캐릭터`}/><div><small>{f.role}</small><h3>{f.name}</h3><p>{f.copy.split('\n').map((line,i)=><span key={line}>{line}{i===0&&<br/>}</span>)}</p><button onClick={()=>onPlay(f.variant)}>SELECT &amp; PLAY <ChevronRight/></button></div></article>)}</div>
     </section>
 
-    <section className="how" id="how">
-      <div className="section-copy centered"><span>THE SPLASH LOOP</span><h2>예측하고. 연결하고. <em>탈출하라.</em></h2></div>
-      <div className="steps">
-        <article><b>01</b><div className="step-icon cyan"><Zap/></div><h3>PLACE</h3><p>상대의 다음 칸을 읽고<br/>Splash Core를 설치하세요.</p><kbd>F</kbd></article>
-        <article><b>02</b><div className="step-icon violet"><Sparkles/></div><h3>CHAIN</h3><p>에너지 경로를 겹쳐 더 멀리,<br/>더 강한 연쇄를 설계하세요.</p><kbd>CORE ×4</kbd></article>
-        <article><b>03</b><div className="step-icon coral"><Gamepad2/></div><h3>ESCAPE</h3><p>마지막 순간 대시로 빠져나가<br/>내가 만든 혼돈에서 생존하세요.</p><kbd>SHIFT</kbd></article>
+    <section className="controls-guide" id="controls">
+      <div className="section-copy centered"><span>YOUR FIRST 30 SECONDS</span><h2>처음이어도. <em>세 단계면 충분합니다.</em></h2><p>움직이고, 코어를 놓고, 안전한 곳으로 빠져나가세요. 복잡한 스킬은 플레이하면서 자연스럽게 열립니다.</p></div>
+      <div className="tutorial-cards">
+        <article className="tutorial-card move">
+          <div className="tutorial-heading"><span>STEP 01</span><small>MOVE</small></div>
+          <div className="tutorial-art"><img src={TUTORIAL_MOVE} alt="블루 리플이 이동하며 낮은 블록을 점프로 넘는 모습"/></div>
+          <div className="tutorial-copy"><h3>움직이고 뛰기</h3><p><b>WASD</b>로 이동하고, 낮은 장애물과 바닥의 구멍은 점프로 넘습니다.</p><div className="tutorial-keys"><span className="wasd-keys" aria-label="W A S D"><i/><kbd>W</kbd><i/><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></span><span className="key-action"><kbd>SPACE</kbd><small>JUMP</small></span></div></div>
+        </article>
+        <article className="tutorial-card core">
+          <div className="tutorial-heading"><span>STEP 02</span><small>PLACE</small></div>
+          <div className="tutorial-art"><img src={TUTORIAL_CORE} alt="블루 리플이 빛나는 코어를 설치하고 뒤로 물러나는 모습"/></div>
+          <div className="tutorial-copy"><h3>코어를 놓고 거리 확보</h3><p><b>F</b>로 코어를 설치한 뒤 빛나는 원형 폭발 범위 밖으로 이동하세요. 설치한 코어가 터지면 슬롯이 돌아옵니다.</p><div className="tutorial-keys"><span className="key-action"><kbd>F</kbd><small>PLACE CORE</small></span><span className="fuse-note"><i/> 설치 후 바로 이동</span></div></div>
+        </article>
+        <article className="tutorial-card escape">
+          <div className="tutorial-heading"><span>STEP 03</span><small>SURVIVE</small></div>
+          <div className="tutorial-art"><img src={TUTORIAL_ESCAPE} alt="블루 리플이 블록으로 폭발을 막고 대시로 빠져나가는 모습"/></div>
+          <div className="tutorial-copy"><h3>막고 빠져나가기</h3><p><b>C</b>로 블록을 설치해 길을 만들고 <b>SHIFT</b> 대시로 폭발 범위에서 빠르게 벗어나세요.</p><div className="tutorial-keys"><span className="key-action"><kbd>C</kbd><small>BUILD</small></span><span className="key-action"><kbd>SHIFT</kbd><small>DASH</small></span></div></div>
+        </article>
       </div>
+
+      <div className="control-reference">
+        <div className="control-reference-copy"><span>ALL CONTROLS</span><h3>상황별 키를<br/>한눈에 보세요.</h3><p>조건부 스킬은 획득하거나 사용할 수 있는 순간에 게임 화면에 나타납니다.</p></div>
+        <div className="control-list">
+          <div><kbd>WASD</kbd><span><b>이동</b><small>화살표 키도 사용 가능</small></span></div>
+          <div><kbd>SPACE</kbd><span><b>점프</b><small>장애물 위로 올라가기</small></span></div>
+          <div><kbd>F</kbd><span><b>코어 설치</b><small>터지면 설치 슬롯 반환</small></span></div>
+          <div><kbd>C</kbd><span><b>블록 설치</b><small>방어벽과 이동 경로 만들기</small></span></div>
+          <div><kbd>SHIFT</kbd><span><b>대시</b><small>위험 범위를 빠르게 탈출</small></span></div>
+          <div><kbd>T</kbd><span><b>캐릭터 도발</b><small>캐릭터별 모션 · 이동 시 취소</small></span></div>
+          <div className="conditional"><kbd>Q</kbd><span><b>코어 던지기</b><small>이동하던 방향으로 투척 · 아이템 필요</small></span></div>
+          <div className="rescue"><kbd>R</kbd><span><b>팀원 구조</b><small>죽은 팀원 위에서 R키를 눌러 살리기</small></span></div>
+        </div>
+      </div>
+
+      <div className="beginner-tip"><span><Sparkles/></span><div><small>BEGINNER TIP</small><strong>처음에는 코어 하나만 놓고 도망치는 것부터 연습하세요.</strong><p>바닥의 빛나는 원이 실제 폭발 범위입니다. 원 밖에 서 있으면 안전합니다.</p></div><button onClick={()=>onPlay()}><Play fill="currentColor"/> 바로 연습하기 <ChevronRight/></button></div>
     </section>
 
     <section className="achievements" id="achievements">

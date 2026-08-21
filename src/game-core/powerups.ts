@@ -1,15 +1,13 @@
 import type { ArenaDefinition, GridCell } from './grid'
 import { GAME_BALANCE } from './config'
+import { traceExplosion } from './grid'
 
 export type ItemKind='KICK'|'THROW'|'CAPACITY'|'PIERCE'
 export type StackableItemStats={bombCapacity:number;canKick:boolean;canThrow:boolean;kickLevel:number;throwLevel:number;pierceCharges:number}
 
-const DIRECTIONS:GridCell[]=[{x:1,z:0},{x:-1,z:0},{x:0,z:1},{x:0,z:-1}]
-
 export const itemForRoll=(roll:number):ItemKind|null=>{
-  if(roll<.17)return 'KICK'
-  if(roll<.34)return 'THROW'
-  if(roll<.54)return 'CAPACITY'
+  if(roll<.22)return 'THROW'
+  if(roll<.47)return 'CAPACITY'
   if(roll<.68)return 'PIERCE'
   return null
 }
@@ -27,16 +25,10 @@ export const kickDistanceForLevel=(level:number)=>Math.max(1,Math.min(GAME_BALAN
 export const throwDistanceForLevel=(level:number)=>GAME_BALANCE.THROW_RANGE+Math.max(0,Math.min(GAME_BALANCE.MAX_ITEM_LEVEL,level)-1)*GAME_BALANCE.THROW_RANGE_PER_LEVEL
 
 export const tracePiercingExplosion=(arena:ArenaDefinition,origin:GridCell,range:number):GridCell[]=>{
-  const cells=[origin]
-  for(const direction of DIRECTIONS)for(let distance=1;distance<=range;distance++){
-    const cell={x:origin.x+direction.x*distance,z:origin.z+direction.z*distance}
-    if(Math.abs(cell.x)>arena.halfX||Math.abs(cell.z)>arena.halfZ)break
-    cells.push(cell)
-  }
-  return cells
+  return traceExplosion(arena,origin,range)
 }
 
 export const piercingFloorCells=(origin:GridCell,cells:ReadonlyArray<GridCell>,spawnPoints:ReadonlyArray<GridCell>)=>{
   const spawns=new Set(spawnPoints.map(cell=>`${cell.x},${cell.z}`))
-  return cells.filter(cell=>Math.abs(cell.x-origin.x)+Math.abs(cell.z-origin.z)>=2&&!spawns.has(`${cell.x},${cell.z}`))
+  return cells.filter(cell=>Math.hypot(cell.x-origin.x,cell.z-origin.z)>=1.5&&!spawns.has(`${cell.x},${cell.z}`))
 }

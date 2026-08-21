@@ -28,8 +28,19 @@ describe('Ripple locomotion rig',()=>{
     expect(rippleGestureWeight(0)).toBeCloseTo(0,5)
     expect(rippleGestureWeight(.5)).toBeCloseTo(1,5)
     expect(rippleGestureWeight(1)).toBeCloseTo(0,5)
-    expect(Math.min(...Object.values(RIPPLE_GESTURE_DURATION))).toBeGreaterThanOrEqual(400)
-    expect(Math.max(...Object.values(RIPPLE_GESTURE_DURATION))).toBeLessThanOrEqual(700)
+    const actionDurations=Object.entries(RIPPLE_GESTURE_DURATION).filter(([gesture])=>gesture!=='taunt').map(([,duration])=>duration)
+    expect(Math.min(...actionDurations)).toBeGreaterThanOrEqual(400)
+    expect(Math.max(...actionDurations)).toBeLessThanOrEqual(700)
+    expect(RIPPLE_GESTURE_DURATION.taunt).toBe(1650)
+  })
+
+  it('gives every character a distinct rigged taunt silhouette',()=>{
+    const signatures=['bloo','lumi','coral','vio'].map(variant=>{
+      const {rig}=createRippleModel(variant as 'bloo'|'lumi'|'coral'|'vio')
+      for(let frame=0;frame<24;frame++)poseRippleRig(rig,0,0,1/60,frame*16,0,0,0,'taunt',.42)
+      return [rig.leftShin.rotation.x,rig.rightShin.rotation.x,rig.body.rotation.x,rig.body.rotation.y,rig.body.rotation.z,rig.body.scale.y].map(value=>value.toFixed(3)).join(',')
+    })
+    expect(new Set(signatures).size).toBe(4)
   })
 
   it('leans into a dash with both arms trailing behind',()=>{

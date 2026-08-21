@@ -32,7 +32,7 @@ export function createRippleModel(variant:RippleVariant):RippleModel{
   const palette=PALETTES[variant],group=new THREE.Group(),bodyRoot=new THREE.Group(),materials:THREE.MeshStandardMaterial[]=[]
   group.name=`Ripple_${variant}`;bodyRoot.name='Body_CTRL'
   group.add(bodyRoot)
-  const material=(color:string,emissive='#000000',intensity=0,roughness=.42)=>{const value=new THREE.MeshStandardMaterial({color,emissive,emissiveIntensity:intensity,roughness,metalness:.025,transparent:true});materials.push(value);return value}
+  const material=(color:string,emissive='#000000',intensity=0,roughness=.42)=>{const value=new THREE.MeshStandardMaterial({color,emissive,emissiveIntensity:intensity,roughness,metalness:.025});materials.push(value);return value}
   const bodyMat=material(palette.body,palette.body,.1,.36),accentMat=material(palette.accent,palette.accent,.18,.34),limbMat=material(palette.limb,palette.limb,.12,.38),faceMat=material('#f4f7ff','#b9dfff',.06,.28),eyeMat=material('#080b20','#080b20',.08,.18),glowMat=material(palette.glow,palette.glow,2.5,.2)
   const add=(geometry:THREE.BufferGeometry,mat:THREE.Material,position:[number,number,number],scale:[number,number,number]=[1,1,1],parent:THREE.Object3D=group)=>{const mesh=new THREE.Mesh(geometry,mat);mesh.position.set(...position);mesh.scale.set(...scale);mesh.castShadow=true;mesh.receiveShadow=true;parent.add(mesh);return mesh}
 
@@ -58,9 +58,6 @@ export function createRippleModel(variant:RippleVariant):RippleModel{
     const forearm=new THREE.Group();forearm.name=side<0?'Elbow_L':'Elbow_R';forearm.position.y=-.25;arm.add(forearm)
     add(new THREE.CapsuleGeometry(.115,.12,6,12),bodyMat,[0,-.1,.025],[1,1,1],forearm)
     add(new THREE.SphereGeometry(.17,20,14),limbMat,[0,-.25,.06],[1.08,.86,.9],forearm)
-    add(new THREE.SphereGeometry(.075,14,10),limbMat,[side*.095,-.31,.075],[1,.75,.78],forearm)
-    add(new THREE.SphereGeometry(.068,14,10),limbMat,[0,-.335,.125],[.92,.72,.74],forearm)
-    add(new THREE.SphereGeometry(.064,14,10),limbMat,[-side*.08,-.305,.105],[.9,.7,.72],forearm)
     arms.push(arm);forearms.push(forearm)
 
     const leg=new THREE.Group();leg.name=side<0?'Hip_L':'Hip_R';leg.position.set(side*.3,.46,.015);group.add(leg)
