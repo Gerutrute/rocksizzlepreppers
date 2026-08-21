@@ -45,7 +45,10 @@ export type RoomSnapshot = {
   roomId:string
   tick:number
   serverTime:number
-  phase:'COUNTDOWN'|'PLAYING'|'ENDED'
+  phase:'COUNTDOWN'|'PLAYING'|'ROUND_ENDED'|'ENDED'
+  round:number
+  scores:Record<Team,number>
+  roundWinner:Team|'draw'|null
   countdown:number
   remaining:number
   fan:'CALM'|'WARNING'|'ACTIVE'

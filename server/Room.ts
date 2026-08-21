@@ -22,7 +22,11 @@ export class Room{
   tick=0
   startedAt:number
   winner:Team|'draw'|null=null
+  round=1
+  scores:Record<Team,number>={cyan:0,coral:0}
+  seriesWinner:Team|null=null
   private lastHumanJoin:number
+  private roundEndedAt=0
   private lastFanPush=0
   private lastVehicleCell=-99
   private coreId=0
@@ -34,7 +38,7 @@ export class Room{
 
   join(id:string,name:string,now=Date.now(),variant:RippleVariant='bloo'){
     if(![...this.players.values()].some(player=>!player.bot)){
-      this.players.clear();this.cores.clear();this.items.clear();this.events.length=0;this.tick=0;this.startedAt=now;this.winner=null;this.lastFanPush=0;this.lastVehicleCell=-99;this.startedEventSent=false;this.resetArena()
+      this.players.clear();this.cores.clear();this.items.clear();this.events.length=0;this.tick=0;this.startedAt=now;this.winner=null;this.round=1;this.scores={cyan:0,coral:0};this.seriesWinner=null;this.roundEndedAt=0;this.lastFanPush=0;this.lastVehicleCell=-99;this.startedEventSent=false;this.resetArena()
     }
     const occupied=new Set([...this.players.values()].map(player=>player.slot))
     let slot=[0,1,2,3].find(index=>!occupied.has(index))
@@ -49,7 +53,7 @@ export class Room{
 
   leave(id:string){
     this.players.delete(id);for(const [coreId,core] of this.cores)if(core.owner===id)this.cores.delete(coreId);this.events.push({event:'PLAYER_LEFT',actorId:id})
-    if(![...this.players.values()].some(player=>!player.bot)){this.players.clear();this.cores.clear();this.items.clear();this.events.length=0;this.tick=0;this.startedAt=Date.now();this.winner=null;this.lastHumanJoin=Date.now();this.startedEventSent=false;this.lastVehicleCell=-99;this.resetArena()}
+    if(![...this.players.values()].some(player=>!player.bot)){this.players.clear();this.cores.clear();this.items.clear();this.events.length=0;this.tick=0;this.startedAt=Date.now();this.winner=null;this.round=1;this.scores={cyan:0,coral:0};this.seriesWinner=null;this.roundEndedAt=0;this.lastHumanJoin=Date.now();this.startedEventSent=false;this.lastVehicleCell=-99;this.resetArena()}
   }
 
   input(id:string,seq:number,dx:number,dz:number){
@@ -58,7 +62,7 @@ export class Room{
   }
 
   action(id:string,action:'PLACE'|'DASH'|'KICK'|'THROW'|'RESCUE'|'JUMP'|'BUILD',direction:{x:number;z:number},now=Date.now()){
-    const player=this.players.get(id);if(!player||player.eliminated||player.falling||player.downedUntil||now<this.playAt())return false
+    const player=this.players.get(id);if(!player||this.winner||player.eliminated||player.falling||player.downedUntil||now<this.playAt())return false
     const cardinal=Math.abs(direction.x)>=Math.abs(direction.z)?{x:Math.sign(direction.x)||1,z:0}:{x:0,z:Math.sign(direction.z)||1}
     if(action==='PLACE')return this.placeCore(player)
     if(action==='JUMP'){
@@ -103,21 +107,16 @@ export class Room{
 
   rematch(id:string,now=Date.now()){
     const requester=this.players.get(id)
-    if(!requester||requester.bot||!this.winner)return false
-    this.cores.clear();this.items.clear();this.winner=null;this.startedAt=now;this.tick=0;this.lastFanPush=0;this.lastVehicleCell=-99;this.lastHumanJoin=now;this.startedEventSent=false;this.resetArena()
-    for(const player of this.players.values()){
-      const spawn=GIANT_PLAYROOM.spawnPoints[player.slot]
-      player.x=spawn.x;player.z=spawn.z;player.yaw=player.team==='cyan'?Math.PI/2:-Math.PI/2;player.hits=0;player.bombCapacity=GAME_BALANCE.CORE_CAPACITY;player.canKick=false;player.canThrow=false;player.kickLevel=0;player.throwLevel=0;player.pierceCharges=0;player.jumpY=0;player.jumpReady=0;player.jumpStarted=0;player.jumpUntil=0;player.jumpBaseY=0;player.buildReady=0;player.falling=false;player.fallVelocity=0;player.downedUntil=0;player.eliminated=false;player.dashReady=0;player.nextAction=now+800+player.slot*350
-      player.input={dx:0,dz:0,seq:player.input.seq};player.lastInput=player.input.seq
-    }
-    this.events.length=0;this.events.push({event:'MATCH_RESTARTED',actorId:id});return true
+    if(!requester||requester.bot||!this.seriesWinner)return false
+    this.round=1;this.scores={cyan:0,coral:0};this.seriesWinner=null;this.resetRound(now)
+    this.events.push({event:'MATCH_RESTARTED',actorId:id});return true
   }
 
   step(dt:number,now=Date.now()){
     if(![...this.players.values()].some(player=>!player.bot))return
     this.fillBots(now)
     this.tick++
-    if(this.winner)return
+    if(this.winner){if(!this.seriesWinner&&now-this.roundEndedAt>=GAME_BALANCE.ROUND_BREAK_MS)this.advanceRound(now);return}
     if(now<this.playAt())return
     if(!this.startedEventSent){this.startedEventSent=true;this.events.push({event:'MATCH_STARTED'})}
     const elapsed=(now-this.playAt())/1000,fan=fanStateAt(elapsed)
@@ -197,13 +196,36 @@ export class Room{
     for(const core of exploding)this.explode(core,now)
     const cyanAlive=[...this.players.values()].some(player=>player.team==='cyan'&&!player.eliminated),coralAlive=[...this.players.values()].some(player=>player.team==='coral'&&!player.eliminated)
     if(elapsed>=GAME_BALANCE.MATCH_SECONDS||((!cyanAlive||!coralAlive)&&this.players.size===4)){
-      this.winner=matchWinner([...this.players.values()].map(player=>({team:player.team,hits:player.hits,eliminated:player.eliminated})));this.events.push({event:'MATCH_ENDED',team:this.winner==='draw'?undefined:this.winner})
+      this.finishRound(matchWinner([...this.players.values()].map(player=>({team:player.team,hits:player.hits,eliminated:player.eliminated}))),now)
     }
   }
 
   snapshot(now=Date.now()):RoomSnapshot{
     const countdown=Math.max(0,Math.ceil((this.playAt()-now)/1000)),elapsed=Math.max(0,(now-this.playAt())/1000)
-    return {roomId:this.id,tick:this.tick,serverTime:now,phase:this.winner?'ENDED':countdown?'COUNTDOWN':'PLAYING',countdown,remaining:Math.max(0,GAME_BALANCE.MATCH_SECONDS-elapsed),fan:fanStateAt(elapsed),vehicle:vehicleStateAt(elapsed),ended:!!this.winner,winner:this.winner,players:[...this.players.values()].map(({input,dashReady,nextAction,jumpStarted,jumpUntil,jumpBaseY,fallVelocity,...player})=>player),cores:[...this.cores.values()].map(core=>({...core})),items:[...this.items.values()],holes:[...this.holes],walls:[...this.arena.walls],destroyedWalls:[...this.destroyedWalls]}
+    return {roomId:this.id,tick:this.tick,serverTime:now,phase:this.seriesWinner?'ENDED':this.winner?'ROUND_ENDED':countdown?'COUNTDOWN':'PLAYING',round:this.round,scores:{...this.scores},roundWinner:this.winner,countdown,remaining:Math.max(0,GAME_BALANCE.MATCH_SECONDS-elapsed),fan:fanStateAt(elapsed),vehicle:vehicleStateAt(elapsed),ended:!!this.seriesWinner,winner:this.seriesWinner,players:[...this.players.values()].map(({input,dashReady,nextAction,jumpStarted,jumpUntil,jumpBaseY,fallVelocity,...player})=>player),cores:[...this.cores.values()].map(core=>({...core})),items:[...this.items.values()],holes:[...this.holes],walls:[...this.arena.walls],destroyedWalls:[...this.destroyedWalls]}
+  }
+
+  private finishRound(winner:Team|'draw',now:number){
+    this.winner=winner;this.roundEndedAt=now
+    if(winner!=='draw'){
+      this.scores[winner]++
+      if(this.scores[winner]>=GAME_BALANCE.SERIES_WINS)this.seriesWinner=winner
+    }
+    this.events.push({event:'ROUND_ENDED',team:winner==='draw'?undefined:winner})
+    if(this.seriesWinner)this.events.push({event:'MATCH_ENDED',team:this.seriesWinner})
+  }
+  private advanceRound(now:number){
+    if(this.winner!=='draw')this.round++
+    this.resetRound(now);this.events.push({event:'ROUND_STARTED'})
+  }
+  private resetRound(now:number){
+    this.cores.clear();this.items.clear();this.winner=null;this.roundEndedAt=0;this.startedAt=now;this.tick=0;this.lastFanPush=0;this.lastVehicleCell=-99;this.lastHumanJoin=now;this.startedEventSent=false;this.resetArena()
+    for(const player of this.players.values()){
+      const spawn=GIANT_PLAYROOM.spawnPoints[player.slot]
+      player.x=spawn.x;player.z=spawn.z;player.yaw=player.team==='cyan'?Math.PI/2:-Math.PI/2;player.hits=0;player.bombCapacity=GAME_BALANCE.CORE_CAPACITY;player.canKick=false;player.canThrow=false;player.kickLevel=0;player.throwLevel=0;player.pierceCharges=0;player.jumpY=0;player.jumpReady=0;player.jumpStarted=0;player.jumpUntil=0;player.jumpBaseY=0;player.buildReady=0;player.falling=false;player.fallVelocity=0;player.downedUntil=0;player.eliminated=false;player.dashReady=0;player.nextAction=now+800+player.slot*350
+      player.input={dx:0,dz:0,seq:player.input.seq};player.lastInput=player.input.seq
+    }
+    this.events.length=0
   }
 
   private playAt(){return this.startedAt+GAME_BALANCE.COUNTDOWN_SECONDS*1000}

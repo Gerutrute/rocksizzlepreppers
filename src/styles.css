@@ -680,6 +680,100 @@ a {
   color: #c2c7d9;
 }
 
+.achievements {
+  padding: 105px clamp(24px, 7vw, 110px) 120px;
+  background:
+    radial-gradient(circle at 18% 18%, #2ddce323, transparent 24%),
+    radial-gradient(circle at 82% 35%, #ff66731c, transparent 27%),
+    #0d1028;
+}
+.achievement-total {
+  display: inline-flex;
+  margin-top: 20px;
+  padding: 9px 15px;
+  border: 1px solid #63edf054;
+  border-radius: 999px;
+  background: #36dce715;
+  color: #74f2f5;
+  font-size: 8px;
+  letter-spacing: 1.5px;
+}
+.achievement-grid {
+  max-width: 1180px;
+  margin: 44px auto 0;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 15px;
+}
+.achievement-grid article {
+  position: relative;
+  min-height: 330px;
+  overflow: hidden;
+  padding: 25px 24px 22px;
+  border: 1px solid #ffffff16;
+  border-radius: 19px;
+  background: linear-gradient(145deg, #1a1f41, #10142e);
+  box-shadow: 0 18px 45px #0506164f;
+  text-align: center;
+}
+.achievement-grid article.unlocked {
+  border-color: #64ecf05c;
+  background: linear-gradient(145deg, #1f3250, #17152f 72%);
+  box-shadow: 0 18px 50px #05061675, inset 0 0 45px #47e4ef0a;
+}
+.badge-frame {
+  position: relative;
+  width: 142px;
+  height: 142px;
+  margin: 0 auto 10px;
+  display: grid;
+  place-items: center;
+}
+.badge-frame::before {
+  content: "";
+  position: absolute;
+  inset: 15%;
+  border-radius: 50%;
+  background: #42e8f344;
+  filter: blur(27px);
+}
+.badge-frame img {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  filter: drop-shadow(0 12px 14px #04061688);
+}
+.achievement-grid .locked .badge-frame img {
+  opacity: .28;
+  filter: grayscale(1) brightness(.65) drop-shadow(0 10px 12px #04061688);
+}
+.badge-frame > span {
+  position: absolute;
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border: 1px solid #ffffff26;
+  border-radius: 50%;
+  background: #0a0d20dc;
+  color: #858da8;
+  font: 400 20px "Black Han Sans";
+}
+.achievement-grid article > small {
+  color: #55e9ef;
+  font-size: 6px;
+  font-weight: 900;
+  letter-spacing: 1.4px;
+}
+.achievement-grid .locked > small { color: #707995; }
+.achievement-grid h3 { margin: 7px 0 8px; font-size: 18px; }
+.achievement-grid p { min-height: 33px; margin: 0; color: #979eb7; font-size: 9px; line-height: 1.65; }
+.achievement-progress { height: 5px; margin: 17px 0 7px; overflow: hidden; border-radius: 10px; background: #080b1c; }
+.achievement-progress i { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #35dce8, #a37aff, #ff6d7a); box-shadow: 0 0 10px #49e8ee; transition: width .35s ease; }
+.achievement-grid article > b { color: #747e9b; font-size: 7px; letter-spacing: .8px; }
+.achievement-grid article.unlocked > b { color: #b8c1db; }
+
 .arena-preview {
   max-width: 1180px;
   min-height: 470px;
@@ -855,12 +949,59 @@ footer small {
   gap: 10px;
 }
 .score time {
+  display: block;
+  min-width: 94px;
+  text-align: center;
   font: 900 25px Inter;
   padding: 12px 17px;
   border: 1px solid #ffffff1e;
   border-radius: 11px;
   background: #0a0d21e6;
   box-shadow: 0 10px 25px #0006;
+}
+.match-clock {
+  position: relative;
+}
+.match-clock > small {
+  position: absolute;
+  left: 50%;
+  top: -12px;
+  transform: translateX(-50%);
+  width: max-content;
+  color: #9ba5c8;
+  font-size: 6px;
+  font-weight: 900;
+  letter-spacing: 1px;
+}
+.match-clock > span {
+  position: absolute;
+  left: 50%;
+  bottom: -16px;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 3px 9px;
+  border: 1px solid #ffffff1a;
+  border-radius: 99px;
+  background: #0a0d21ef;
+  box-shadow: 0 6px 14px #0007;
+}
+.match-clock > span b {
+  font-size: 11px;
+}
+.match-clock > span b.cyan {
+  color: #46e5ee;
+}
+.match-clock > span b.coral {
+  color: #ff6b74;
+}
+.match-clock > span i {
+  color: #737c9b;
+  font-size: 5px;
+  font-style: normal;
+  font-weight: 900;
+  letter-spacing: 1px;
 }
 .team {
   height: 55px;
@@ -915,7 +1056,7 @@ footer small {
   position: absolute;
   z-index: 3;
   left: 50%;
-  top: 151px;
+  top: 164px;
   transform: translateX(-50%);
   display: flex;
   align-items: center;
@@ -1093,6 +1234,32 @@ footer small {
   margin: 0 8px;
   vertical-align: middle;
 }
+.achievement-toast {
+  position: absolute;
+  z-index: 10;
+  top: 82px;
+  right: 22px;
+  width: min(340px, calc(100vw - 28px));
+  min-height: 98px;
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  padding: 11px 17px 11px 10px;
+  border: 1px solid #70f1f376;
+  border-radius: 17px;
+  background: linear-gradient(135deg, #172744f2, #15132df2);
+  box-shadow: 0 18px 45px #02030cb8, inset 0 0 28px #41e8ef10;
+  backdrop-filter: blur(14px);
+  pointer-events: none;
+  animation: badge-toast-in .48s cubic-bezier(.2,.9,.25,1.2), badge-toast-glow 1.5s ease-in-out infinite alternate;
+}
+.achievement-toast img { width: 76px; height: 76px; flex: 0 0 76px; object-fit: contain; filter: drop-shadow(0 8px 11px #0008); }
+.achievement-toast div { min-width: 0; }
+.achievement-toast span { display: block; color: #65eef1; font-size: 6px; font-weight: 900; letter-spacing: 1.7px; }
+.achievement-toast b { display: block; margin: 5px 0 4px; color: #fff; font-size: 15px; }
+.achievement-toast small { display: block; color: #a8b0c8; font-size: 7px; line-height: 1.45; }
+@keyframes badge-toast-in { from { opacity: 0; transform: translateX(45px) scale(.92); } to { opacity: 1; transform: translateX(0) scale(1); } }
+@keyframes badge-toast-glow { from { border-color: #70f1f34d; } to { border-color: #ff798c8c; } }
 .match-countdown {
   position: absolute;
   z-index: 7;
@@ -1157,6 +1324,9 @@ footer small {
 .result-panel.lose > span {
   color: #ff6876;
 }
+.result-panel.draw > span {
+  color: #ffd670;
+}
 .result-panel h1 {
   font: 400 40px "Black Han Sans";
   margin: 13px 0;
@@ -1164,6 +1334,28 @@ footer small {
 .result-panel p {
   color: #9da5bd;
   font-size: 10px;
+}
+.series-result {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  margin: 19px 0 6px;
+}
+.series-result b {
+  min-width: 54px;
+  font: 400 42px "Black Han Sans";
+  color: #62eef5;
+}
+.series-result b:last-child {
+  color: #ff6b74;
+}
+.series-result i {
+  color: #777f9d;
+  font-size: 7px;
+  font-style: normal;
+  font-weight: 900;
+  letter-spacing: 1.5px;
 }
 .result-panel > div {
   display: flex;
@@ -1281,6 +1473,7 @@ footer small {
     border-right: 0;
     border-bottom: 1px solid #ffffff12;
   }
+  .achievement-grid { grid-template-columns: repeat(2, 1fr); }
   .arena-preview {
     margin: 0 20px 80px;
     padding: 48px 35px;
@@ -1346,6 +1539,10 @@ footer small {
   .fighter > div {
     width: 100%;
   }
+  .achievements { padding-left: 16px; padding-right: 16px; }
+  .achievement-grid { grid-template-columns: 1fr; }
+  .achievement-grid article { min-height: 300px; }
+  .achievement-toast { top: 72px; right: 14px; }
   .arena-copy h2 {
     font-size: 36px;
   }

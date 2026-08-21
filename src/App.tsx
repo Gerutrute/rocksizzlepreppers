@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { ChevronRight, Copy, Gamepad2, Play, Radio, Sparkles, Users, Volume2, VolumeX, Zap } from 'lucide-react'
 import type { RippleVariant } from './game-core/protocol'
 import type { NetworkSession } from './network/NetworkClient'
+import { ACHIEVEMENTS, ACHIEVEMENT_PROFILE_EVENT, achievementProgress, readAchievementProfile, type AchievementProfile } from './achievements'
 
 const SplashArena = lazy(() => import('./SplashArena'))
 const KEY_ART = '/assets/splash/project-splash-key-art-v2-web.jpg'
@@ -23,6 +24,7 @@ const fighters = [
 function Lobby({ onPlay,onRoom }:{ onPlay:(variant?:RippleVariant)=>void;onRoom:()=>void }) {
   const [musicMuted,setMusicMuted]=useState(false)
   const [musicStarted,setMusicStarted]=useState(false)
+  const [achievementProfile,setAchievementProfile]=useState<AchievementProfile>(readAchievementProfile)
   const musicRef=useRef<HTMLAudioElement|null>(null)
   const startMusic=()=>{
     const music=musicRef.current
@@ -36,13 +38,15 @@ function Lobby({ onPlay,onRoom }:{ onPlay:(variant?:RippleVariant)=>void;onRoom:
     return()=>{window.removeEventListener('pointerdown',startMusic);window.removeEventListener('keydown',startMusic);music.pause();music.currentTime=0;musicRef.current=null}
   },[])
   useEffect(()=>{const music=musicRef.current;if(!music)return;music.muted=musicMuted;if(!musicMuted)startMusic()},[musicMuted])
+  useEffect(()=>{const refresh=()=>setAchievementProfile(readAchievementProfile());window.addEventListener(ACHIEVEMENT_PROFILE_EVENT,refresh);window.addEventListener('storage',refresh);return()=>{window.removeEventListener(ACHIEVEMENT_PROFILE_EVENT,refresh);window.removeEventListener('storage',refresh)}},[])
+  const unlockedCount=ACHIEVEMENTS.filter(achievement=>achievementProfile.unlocked[achievement.id]).length
   return <main className="lobby">
     {!musicStarted&&!musicMuted&&<div className="sound-entry" role="dialog" aria-modal="true" aria-label="음악과 함께 사이트 입장">
       <div className="sound-entry-card"><Mark/><span>TURN UP THE CHAOS</span><h2>ROCK SIZZLE<br/><strong>PREPPERS</strong></h2><p>음악과 함께 거대한 놀이방으로 입장하세요.</p><button onClick={startMusic} autoFocus><Volume2/> 사운드 켜고 입장</button><small>CLICK TO START · MUSIC ON</small></div>
     </div>}
     <nav className="nav">
       <a className="brand" href="#top"><Mark/><span>ROCK SIZZLE</span><strong>PREPPERS</strong></a>
-      <div className="nav-links"><a href="#ripples">리플</a><a href="#how">게임 소개</a><a href="#arena">아레나</a></div>
+      <div className="nav-links"><a href="#ripples">리플</a><a href="#how">게임 소개</a><a href="#achievements">업적</a><a href="#arena">아레나</a></div>
       <span className="online"><i/> ARENA ONLINE</span>
       <button className={`lobby-sound ${musicMuted?'muted':''}`} onClick={()=>setMusicMuted(value=>!value)} aria-label={musicMuted?'홈 음악 켜기':'홈 음악 끄기'} title="Purrfectly Chaotic">{musicMuted?<VolumeX/>:<Volume2/>}</button>
       <button className="nav-play" onClick={()=>onPlay()}><Play fill="currentColor"/> QUICK MATCH</button>
@@ -78,6 +82,22 @@ function Lobby({ onPlay,onRoom }:{ onPlay:(variant?:RippleVariant)=>void;onRoom:
         <article><b>02</b><div className="step-icon violet"><Sparkles/></div><h3>CHAIN</h3><p>에너지 경로를 겹쳐 더 멀리,<br/>더 강한 연쇄를 설계하세요.</p><kbd>CORE ×4</kbd></article>
         <article><b>03</b><div className="step-icon coral"><Gamepad2/></div><h3>ESCAPE</h3><p>마지막 순간 대시로 빠져나가<br/>내가 만든 혼돈에서 생존하세요.</p><kbd>SHIFT</kbd></article>
       </div>
+    </section>
+
+    <section className="achievements" id="achievements">
+      <div className="section-copy centered"><span>RIPPLE BADGE ARCHIVE</span><h2>플레이하고. 도전하고. <em>배지를 모으세요.</em></h2><p>행동과 전투 기록은 이 브라우저에 계속 누적됩니다.</p><strong className="achievement-total">{unlockedCount} / {ACHIEVEMENTS.length} UNLOCKED</strong></div>
+      <div className="achievement-grid">{ACHIEVEMENTS.map(achievement=>{
+        const unlocked=!!achievementProfile.unlocked[achievement.id]
+        const progress=achievementProgress(achievement,achievementProfile)
+        return <article className={unlocked?'unlocked':'locked'} key={achievement.id}>
+          <div className="badge-frame"><img src={achievement.badge} alt={`${achievement.title} 배지`}/>{!unlocked&&<span>?</span>}</div>
+          <small>{unlocked?'BADGE ACQUIRED':'CHALLENGE IN PROGRESS'}</small>
+          <h3>{achievement.title}</h3>
+          <p>{achievement.description}</p>
+          <div className="achievement-progress" aria-label={`${progress.displayValue}/${achievement.target}`}><i style={{width:`${progress.ratio*100}%`}}/></div>
+          <b>{progress.displayValue} / {achievement.target}</b>
+        </article>
+      })}</div>
     </section>
 
     <section className="arena-preview" id="arena">

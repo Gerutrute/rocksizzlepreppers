@@ -55,16 +55,33 @@ describe('authoritative room',()=>{
     expect(room.events.some(event=>event.event==='CORE_EXPLODED'&&event.chain===2)).toBe(true)
   })
 
-  it('restarts an ended room in place for every connected player',()=>{
+  it('plays a best-of-three series, advances rounds automatically and resets after two wins',()=>{
     const room=new Room('AGAIN',0)
     const players=[0,1,2,3].map(index=>room.join(`p${index}`,`Player ${index}`,0))
     players[0].hits=3;players[0].eliminated=true
     room.step(1/30,184_000)
-    expect(room.winner).not.toBeNull()
-    expect(room.rematch(players[2].id,185_000)).toBe(true)
-    expect(room.snapshot(185_000)).toMatchObject({phase:'COUNTDOWN',countdown:3,remaining:180,ended:false,winner:null})
+    expect(room.snapshot(184_000)).toMatchObject({phase:'ROUND_ENDED',round:1,scores:{cyan:0,coral:1},roundWinner:'coral',ended:false,winner:null})
+    expect(room.rematch(players[2].id,185_000)).toBe(false)
+
+    room.step(1/30,187_000)
+    expect(room.snapshot(187_000)).toMatchObject({phase:'COUNTDOWN',round:2,countdown:3,remaining:180,scores:{cyan:0,coral:1},roundWinner:null})
     expect(players.every(player=>player.hits===0&&!player.eliminated)).toBe(true)
+
+    players[0].eliminated=true;players[1].eliminated=true
+    room.step(1/30,190_001)
+    expect(room.snapshot(190_001)).toMatchObject({phase:'ENDED',round:2,scores:{cyan:0,coral:2},roundWinner:'coral',ended:true,winner:'coral'})
+    expect(room.rematch(players[2].id,190_100)).toBe(true)
+    expect(room.snapshot(190_100)).toMatchObject({phase:'COUNTDOWN',round:1,countdown:3,remaining:180,scores:{cyan:0,coral:0},roundWinner:null,ended:false,winner:null})
     expect(room.events.at(-1)?.event).toBe('MATCH_RESTARTED')
+  })
+
+  it('replays a drawn round without awarding a series win',()=>{
+    const room=new Room('DRAW-SERIES',0)
+    ;[0,1,2,3].forEach(index=>room.join(`p${index}`,`Player ${index}`,0))
+    room.step(1/30,184_000)
+    expect(room.snapshot(184_000)).toMatchObject({phase:'ROUND_ENDED',round:1,scores:{cyan:0,coral:0},roundWinner:'draw'})
+    room.step(1/30,187_000)
+    expect(room.snapshot(187_000)).toMatchObject({phase:'COUNTDOWN',round:1,scores:{cyan:0,coral:0},roundWinner:null})
   })
 
   it('does not allow a bot or an active match to force a restart',()=>{

@@ -28,6 +28,8 @@ export const GAME_BALANCE = Object.freeze({
   THROW_DURATION_MS: 620,
   COUNTDOWN_SECONDS: 3,
   MATCH_SECONDS: 180,
+  SERIES_WINS: 2,
+  ROUND_BREAK_MS: 3000,
 })
 
 export type GameBalance = typeof GAME_BALANCE
